@@ -13,9 +13,14 @@ import {
   CreditCard, 
   RefreshCw,
   Plus,
-  Trash2
+  Trash2,
+  Eye,
+  EyeOff,
+  Upload,
+  File,
+  Download
 } from 'lucide-react';
-import { VaultItem, PasswordData, NoteData, BankData } from '@/services/storage';
+import { VaultItem, PasswordData, NoteData, BankData, DocumentData, IndexedDBStorage } from '@/services/indexedDBStorage';
 import { CryptoService } from '@/services/crypto';
 
 interface VaultItemFormProps {
@@ -25,8 +30,8 @@ interface VaultItemFormProps {
 }
 
 export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) => {
-  const [type, setType] = useState<'password' | 'note' | 'bank'>(
-    (item?.type === 'document' ? 'note' : item?.type) || 'password'
+  const [type, setType] = useState<'password' | 'note' | 'document' | 'bank'>(
+    item?.type || 'password'
   );
   const [title, setTitle] = useState(item?.title || '');
   const [formData, setFormData] = useState<any>(item?.data || {});
@@ -34,8 +39,10 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
     (item?.data as NoteData)?.tags || []
   );
   const [newTag, setNewTag] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
@@ -44,6 +51,28 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
     // Add tags for notes
     if (type === 'note') {
       processedData.tags = tags;
+    }
+    
+    // Handle file upload for documents
+    if (type === 'document' && uploadedFile) {
+      if (!IndexedDBStorage.validateFileSize(uploadedFile.size)) {
+        alert('File size must be less than 2MB');
+        return;
+      }
+      
+      try {
+        const fileData = await IndexedDBStorage.fileToBase64(uploadedFile);
+        processedData = {
+          fileName: uploadedFile.name,
+          fileType: uploadedFile.type,
+          fileSize: uploadedFile.size,
+          fileData: fileData,
+          notes: processedData.notes || ''
+        };
+      } catch (error) {
+        alert('Failed to process file');
+        return;
+      }
     }
 
     const vaultItem: VaultItem = {
@@ -74,6 +103,32 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!IndexedDBStorage.validateFileSize(file.size)) {
+        alert('File size must be less than 2MB');
+        return;
+      }
+      setUploadedFile(file);
+      if (!title) {
+        setTitle(file.name);
+      }
+    }
+  };
+
+  const downloadFile = () => {
+    if (formData.fileData && formData.fileName && formData.fileType) {
+      const blob = IndexedDBStorage.base64ToBlob(formData.fileData, formData.fileType);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = formData.fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const renderPasswordForm = () => (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -102,14 +157,29 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
       <div>
         <Label htmlFor="password">Password</Label>
         <div className="flex gap-2">
-          <Input
-            id="password"
-            type="password"
-            value={formData.password || ''}
-            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-            placeholder="Enter password"
-            className="bg-background/50"
-          />
+          <div className="relative flex-1">
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              value={formData.password || ''}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              placeholder="Enter password"
+              className="bg-background/50 pr-10"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+            >
+              {showPassword ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
           <Button
             type="button"
             variant="outline"
@@ -185,6 +255,88 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
     </div>
   );
 
+  const renderDocumentForm = () => (
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="fileUpload">Document/Photo</Label>
+        <div className="space-y-2">
+          {!formData.fileName ? (
+            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+              <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground mb-2">
+                Upload a document or photo (max 2MB)
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => document.getElementById('fileInput')?.click()}
+              >
+                Choose File
+              </Button>
+              <input
+                id="fileInput"
+                type="file"
+                onChange={handleFileUpload}
+                className="hidden"
+                accept="image/*,.pdf,.doc,.docx,.txt"
+              />
+            </div>
+          ) : (
+            <div className="border border-border rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <File className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="font-medium">{formData.fileName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {(formData.fileSize / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={downloadFile}
+                  >
+                    <Download className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('fileInput')?.click()}
+                  >
+                    Replace
+                  </Button>
+                </div>
+              </div>
+              <input
+                id="fileInput"
+                type="file"
+                onChange={handleFileUpload}
+                className="hidden"
+                accept="image/*,.pdf,.doc,.docx,.txt"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div>
+        <Label htmlFor="docNotes">Notes (Optional)</Label>
+        <Textarea
+          id="docNotes"
+          value={formData.notes || ''}
+          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          placeholder="Additional notes about this document..."
+          className="bg-background/50 min-h-[80px]"
+        />
+      </div>
+    </div>
+  );
+
   const renderBankForm = () => (
     <div className="space-y-4">
       <div>
@@ -240,6 +392,7 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
     switch (type) {
       case 'password': return Key;
       case 'note': return FileText;
+      case 'document': return File;
       case 'bank': return CreditCard;
     }
   };
@@ -277,9 +430,10 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
                 <Label htmlFor="type">Type</Label>
                 <Select
                   value={type}
-                  onValueChange={(value: 'password' | 'note' | 'bank') => {
+                  onValueChange={(value: 'password' | 'note' | 'document' | 'bank') => {
                     setType(value);
                     setFormData({});
+                    setUploadedFile(null);
                   }}
                 >
                   <SelectTrigger className="bg-background/50">
@@ -296,6 +450,12 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4" />
                         Secure Note
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="document">
+                      <div className="flex items-center gap-2">
+                        <File className="w-4 h-4" />
+                        Document/Photo
                       </div>
                     </SelectItem>
                     <SelectItem value="bank">
@@ -323,6 +483,7 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
 
             {type === 'password' && renderPasswordForm()}
             {type === 'note' && renderNoteForm()}
+            {type === 'document' && renderDocumentForm()}
             {type === 'bank' && renderBankForm()}
 
             <div className="flex gap-3 pt-4">

@@ -13,10 +13,11 @@ import {
   Download,
   Upload,
   Settings,
-  Lock
+  Lock,
+  File
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { VaultItem, StorageService } from '@/services/storage';
+import { VaultItem, IndexedDBStorage } from '@/services/indexedDBStorage';
 import { useToast } from '@/hooks/use-toast';
 import { VaultItemForm } from './VaultItemForm';
 import { VaultItemCard } from './VaultItemCard';
@@ -24,9 +25,10 @@ import { VaultItemCard } from './VaultItemCard';
 interface VaultDashboardProps {
   masterPassword: string;
   onLogout: () => void;
+  onShowLockSettings?: () => void;
 }
 
-export const VaultDashboard = ({ masterPassword, onLogout }: VaultDashboardProps) => {
+export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }: VaultDashboardProps) => {
   const [items, setItems] = useState<VaultItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
@@ -39,6 +41,7 @@ export const VaultDashboard = ({ masterPassword, onLogout }: VaultDashboardProps
     { id: 'all', label: 'All Items', icon: Shield, count: items.length },
     { id: 'password', label: 'Passwords', icon: Key, count: items.filter(i => i.type === 'password').length },
     { id: 'note', label: 'Notes', icon: FileText, count: items.filter(i => i.type === 'note').length },
+    { id: 'document', label: 'Documents', icon: File, count: items.filter(i => i.type === 'document').length },
     { id: 'bank', label: 'Banking', icon: CreditCard, count: items.filter(i => i.type === 'bank').length }
   ];
 
@@ -48,7 +51,7 @@ export const VaultDashboard = ({ masterPassword, onLogout }: VaultDashboardProps
 
   const loadVaultData = async () => {
     try {
-      const vaultItems = await StorageService.loadVault(masterPassword);
+      const vaultItems = await IndexedDBStorage.loadVault(masterPassword);
       setItems(vaultItems);
     } catch (error) {
       toast({
@@ -67,7 +70,7 @@ export const VaultDashboard = ({ masterPassword, onLogout }: VaultDashboardProps
         ? items.map(i => i.id === editingItem.id ? item : i)
         : [...items, item];
       
-      await StorageService.saveVault(updatedItems, masterPassword);
+      await IndexedDBStorage.saveVault(updatedItems, masterPassword);
       setItems(updatedItems);
       setShowAddForm(false);
       setEditingItem(null);
@@ -89,7 +92,7 @@ export const VaultDashboard = ({ masterPassword, onLogout }: VaultDashboardProps
   const handleDeleteItem = async (itemId: string) => {
     try {
       const updatedItems = items.filter(i => i.id !== itemId);
-      await StorageService.saveVault(updatedItems, masterPassword);
+      await IndexedDBStorage.saveVault(updatedItems, masterPassword);
       setItems(updatedItems);
       
       toast({
@@ -108,7 +111,7 @@ export const VaultDashboard = ({ masterPassword, onLogout }: VaultDashboardProps
 
   const handleExport = async () => {
     try {
-      const exportData = await StorageService.exportVault(masterPassword);
+      const exportData = await IndexedDBStorage.exportVault(masterPassword);
       const blob = new Blob([exportData], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -137,7 +140,7 @@ export const VaultDashboard = ({ masterPassword, onLogout }: VaultDashboardProps
 
     try {
       const content = await file.text();
-      const importedItems = await StorageService.importVault(content, masterPassword);
+      const importedItems = await IndexedDBStorage.importVault(content, masterPassword);
       setItems(importedItems);
       
       toast({
@@ -221,6 +224,18 @@ export const VaultDashboard = ({ masterPassword, onLogout }: VaultDashboardProps
                   className="hidden"
                 />
               </div>
+              
+              {onShowLockSettings && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onShowLockSettings}
+                  className="border-border hover:bg-secondary"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
+                </Button>
+              )}
               
               <Button
                 variant="outline"

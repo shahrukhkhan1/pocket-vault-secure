@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecureVault - Secure Personal Data Storage</title>
+  <script>
+    // GitHub Pages SPA fallback - redirect to index.html with the path as a query parameter
+    const path = window.location.pathname;
+    const search = window.location.search;
+    const hash = window.location.hash;
+    
+    // Get the base path from the current location
+    const segments = path.split('/').filter(Boolean);
+    const repoName = segments[0] || '';
+    
+    // Construct the redirect URL
+    let redirectUrl = '/';
+    if (repoName && !repoName.includes('.')) {
+      redirectUrl = `/${repoName}/`;
+    }
+    
+    // Add the original path as a query parameter for client-side routing
+    if (path !== '/' && path !== `/${repoName}/`) {
+      const originalPath = path.replace(`/${repoName}`, '') || '/';
+      redirectUrl += `?p=${encodeURIComponent(originalPath)}${search}${hash}`;
+    } else {
+      redirectUrl += search + hash;
+    }
+    
+    window.location.replace(redirectUrl);
+  </script>
+</head>
+<body>
+  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem; text-align: center;">
+    <h1>Redirecting to SecureVault...</h1>
+    <p>If you're not redirected automatically, <a href="/">click here</a>.</p>
+  </div>
+</body>
+</html>

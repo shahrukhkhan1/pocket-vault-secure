@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Shield, Lock, Eye, EyeOff } from 'lucide-react';
-import { StorageService } from '@/services/storage';
+import { IndexedDBStorage } from '@/services/indexedDBStorage';
 import { useToast } from '@/hooks/use-toast';
 
 interface LoginFormProps {
@@ -16,7 +16,15 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const hasExistingVault = StorageService.hasVault();
+  const [vaultExists, setVaultExists] = useState(false);
+
+  useEffect(() => {
+    const checkVault = async () => {
+      const hasVault = await IndexedDBStorage.hasVault();
+      setVaultExists(hasVault);
+    };
+    checkVault();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,8 +32,8 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
 
     setIsLoading(true);
     try {
-      if (hasExistingVault) {
-        const isValid = await StorageService.verifyMasterPassword(password);
+      if (vaultExists) {
+        const isValid = await IndexedDBStorage.verifyMasterPassword(password);
         if (!isValid) {
           toast({
             title: "Invalid Password",
@@ -66,10 +74,10 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-semibold text-center">
-              {hasExistingVault ? 'Welcome Back' : 'Create Vault'}
+              {vaultExists ? 'Welcome Back' : 'Create Vault'}
             </CardTitle>
             <CardDescription className="text-center">
-              {hasExistingVault 
+              {vaultExists 
                 ? 'Enter your master password to unlock your vault'
                 : 'Set a strong master password to create your secure vault'
               }
@@ -110,15 +118,15 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-primary-foreground/20 border-t-primary-foreground rounded-full animate-spin" />
-                    {hasExistingVault ? 'Unlocking...' : 'Creating...'}
+                    {vaultExists ? 'Unlocking...' : 'Creating...'}
                   </div>
                 ) : (
-                  hasExistingVault ? 'Unlock Vault' : 'Create Vault'
+                  vaultExists ? 'Unlock Vault' : 'Create Vault'
                 )}
               </Button>
             </form>
 
-            {!hasExistingVault && (
+            {!vaultExists && (
               <div className="mt-4 p-3 bg-accent/10 rounded-lg border border-accent/20">
                 <p className="text-xs text-muted-foreground">
                   <strong>Important:</strong> Your master password cannot be recovered. 
