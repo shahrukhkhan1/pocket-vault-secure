@@ -2,55 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Secure Vault Design System - Security-focused dark theme with trust-inspiring accents */
+/* SecureVault Design System - Professional Security Theme */
 
 @layer base {
   :root {
-    /* Security Dark Theme */
-    --background: 220 15% 8%;
-    --foreground: 210 20% 95%;
+    /* Deep Navy Background Theme */
+    --background: 210 75% 15%; /* Deep Navy #0A2540 */
+    --foreground: 0 0% 100%; /* White #FFFFFF */
 
-    --card: 220 15% 10%;
-    --card-foreground: 210 20% 95%;
+    --card: 210 75% 18%;
+    --card-foreground: 0 0% 100%;
 
-    --popover: 220 15% 12%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 210 75% 20%;
+    --popover-foreground: 0 0% 100%;
 
-    /* Trust-inspiring primary (security blue) */
-    --primary: 200 90% 55%;
-    --primary-foreground: 220 15% 8%;
-    --primary-glow: 200 80% 65%;
+    /* Emerald Green Primary */
+    --primary: 164 46% 33%; /* Emerald Green #2E7D6B */
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 164 46% 43%;
 
-    /* Secure secondary */
-    --secondary: 220 12% 15%;
-    --secondary-foreground: 210 20% 90%;
+    /* Gold Secondary/Highlights */
+    --secondary: 45 70% 52%; /* Gold #D4AF37 */
+    --secondary-foreground: 210 75% 15%;
 
-    --muted: 220 10% 18%;
-    --muted-foreground: 210 15% 65%;
+    --muted: 210 15% 25%;
+    --muted-foreground: 0 0% 92%; /* Light Gray #EAEAEA */
 
-    /* Secure accent (teal) */
-    --accent: 180 85% 50%;
-    --accent-foreground: 220 15% 8%;
+    /* Gold Accent */
+    --accent: 45 70% 52%; /* Gold #D4AF37 */
+    --accent-foreground: 210 75% 15%;
 
     /* Security warning */
     --destructive: 0 85% 60%;
-    --destructive-foreground: 210 20% 95%;
+    --destructive-foreground: 0 0% 100%;
 
     /* Success (encrypted) */
-    --success: 140 80% 50%;
-    --success-foreground: 220 15% 8%;
+    --success: 164 46% 33%;
+    --success-foreground: 0 0% 100%;
 
-    /* Borders and inputs */
-    --border: 220 12% 20%;
-    --input: 220 12% 18%;
-    --ring: 200 90% 55%;
+    /* Charcoal Gray Borders */
+    --border: 0 0% 17%; /* Charcoal Gray #2C2C2C */
+    --input: 210 75% 20%;
+    --ring: 164 46% 33%;
 
     --radius: 0.75rem;
 
-    /* Gradients for security feel */
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
-    --gradient-security: linear-gradient(145deg, hsl(220 15% 10%), hsl(220 12% 12%));
-    --gradient-card: linear-gradient(135deg, hsl(220 15% 10%) 0%, hsl(220 12% 12%) 100%);
+    /* Enhanced Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(164 46% 33%), hsl(164 46% 43%));
+    --gradient-secondary: linear-gradient(135deg, hsl(45 70% 52%), hsl(45 70% 62%));
+    --gradient-navy: linear-gradient(145deg, hsl(210 75% 15%), hsl(210 75% 18%));
+    --gradient-card: linear-gradient(135deg, hsl(210 75% 18%) 0%, hsl(210 75% 20%) 100%);
     
     /* Shadows for depth */
     --shadow-secure: 0 10px 30px -10px hsl(200 90% 55% / 0.2);
@@ -69,7 +70,7 @@
   }
 
   body {
-    @apply bg-gradient-security text-foreground;
+    @apply bg-gradient-navy text-foreground;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
