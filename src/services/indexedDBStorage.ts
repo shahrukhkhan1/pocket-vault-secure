@@ -81,9 +81,9 @@ export class IndexedDBStorage {
   }
 
   /**
-   * Saves encrypted vault data to IndexedDB
+   * Saves encrypted vault data to IndexedDB with optional hint
    */
-  static async saveVault(items: VaultItem[], masterPassword: string): Promise<void> {
+  static async saveVault(items: VaultItem[], masterPassword: string, hint?: string): Promise<void> {
     try {
       const db = await this.initDB();
       const vaultData = JSON.stringify(items);
@@ -107,6 +107,15 @@ export class IndexedDBStorage {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
+
+      // Save password hint if provided
+      if (hint) {
+        await new Promise((resolve, reject) => {
+          const request = authStore.put(hint, 'password_hint');
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
       
     } catch (error) {
       throw new Error('Failed to save vault data');
@@ -292,5 +301,26 @@ export class IndexedDBStorage {
     
     const byteArray = new Uint8Array(byteNumbers);
     return new Blob([byteArray], { type: mimeType });
+  }
+
+  /**
+   * Gets password hint if exists
+   */
+  static async getPasswordHint(): Promise<string | null> {
+    try {
+      const db = await this.initDB();
+      const transaction = db.transaction([this.AUTH_STORE], 'readonly');
+      const store = transaction.objectStore(this.AUTH_STORE);
+      
+      const result = await new Promise<any>((resolve, reject) => {
+        const request = store.get('password_hint');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      
+      return result || null;
+    } catch (error) {
+      return null;
+    }
   }
 }

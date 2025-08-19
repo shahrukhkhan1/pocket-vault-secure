@@ -3,25 +3,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Shield, Lock, Eye, EyeOff } from 'lucide-react';
+import { Shield, Lock, Eye, EyeOff, Share2, Star, Check, Zap, ShieldCheck, Smartphone } from 'lucide-react';
 import { IndexedDBStorage } from '@/services/indexedDBStorage';
 import { useToast } from '@/hooks/use-toast';
 
 interface LoginFormProps {
-  onLogin: (password: string) => void;
+  onLogin: (password: string, hint?: string) => void;
 }
 
 export const LoginForm = ({ onLogin }: LoginFormProps) => {
   const [password, setPassword] = useState('');
+  const [hint, setHint] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const [vaultExists, setVaultExists] = useState(false);
+  const [savedHint, setSavedHint] = useState<string | null>(null);
 
   useEffect(() => {
     const checkVault = async () => {
       const hasVault = await IndexedDBStorage.hasVault();
       setVaultExists(hasVault);
+      
+      if (hasVault) {
+        const hint = await IndexedDBStorage.getPasswordHint();
+        setSavedHint(hint);
+      }
     };
     checkVault();
   }, []);
@@ -45,7 +52,7 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
         }
       }
       
-      onLogin(password);
+      onLogin(password, vaultExists ? undefined : hint);
     } catch (error) {
       toast({
         title: "Authentication Failed",
@@ -56,30 +63,136 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
     }
   };
 
+  const shareApp = async () => {
+    const shareData = {
+      title: 'SecureVault - Encrypted Password Manager',
+      text: 'Check out SecureVault - a secure, offline password manager with military-grade encryption!',
+      url: window.location.href
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
+        toast({
+          title: "Link Copied",
+          description: "Share link copied to clipboard",
+          variant: "default"
+        });
+      }
+    } catch (error) {
+      // Fallback - copy to clipboard
+      try {
+        await navigator.clipboard.writeText(shareData.url);
+        toast({
+          title: "Link Copied",
+          description: "App link copied to clipboard",
+          variant: "default"
+        });
+      } catch (clipError) {
+        toast({
+          title: "Share Failed",
+          description: "Unable to share app",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-security p-4">
-      <div className="w-full max-w-md space-y-8">
-        {/* Logo/Header */}
-        <div className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center shadow-glow">
-            <Shield className="w-8 h-8 text-primary-foreground" />
+      <div className="w-full max-w-4xl space-y-8">
+        {!vaultExists && (
+          <>
+            {/* Hero Section */}
+            <div className="text-center space-y-6">
+              <div className="mx-auto w-20 h-20 bg-gradient-primary rounded-full flex items-center justify-center shadow-glow">
+                <Shield className="w-10 h-10 text-primary-foreground" />
+              </div>
+              <div className="space-y-4">
+                <h1 className="text-4xl md:text-5xl font-bold text-foreground">
+                  SecureVault
+                </h1>
+                <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+                  Military-grade encryption meets beautiful design. Store passwords, documents, and sensitive data with complete privacy.
+                </p>
+              </div>
+              
+              {/* Features Grid */}
+              <div className="grid md:grid-cols-3 gap-6 mt-12 mb-8">
+                <div className="bg-gradient-card border border-border rounded-lg p-6 text-center">
+                  <ShieldCheck className="w-8 h-8 text-primary mx-auto mb-3" />
+                  <h3 className="font-semibold text-foreground mb-2">Bank-Level Security</h3>
+                  <p className="text-sm text-muted-foreground">AES-256 encryption with PBKDF2 key derivation</p>
+                </div>
+                <div className="bg-gradient-card border border-border rounded-lg p-6 text-center">
+                  <Smartphone className="w-8 h-8 text-primary mx-auto mb-3" />
+                  <h3 className="font-semibold text-foreground mb-2">Works Offline</h3>
+                  <p className="text-sm text-muted-foreground">PWA technology - works anywhere, anytime</p>
+                </div>
+                <div className="bg-gradient-card border border-border rounded-lg p-6 text-center">
+                  <Zap className="w-8 h-8 text-primary mx-auto mb-3" />
+                  <h3 className="font-semibold text-foreground mb-2">Zero Knowledge</h3>
+                  <p className="text-sm text-muted-foreground">Data never leaves your device</p>
+                </div>
+              </div>
+
+              {/* Features List */}
+              <div className="bg-gradient-card border border-border rounded-lg p-6 max-w-md mx-auto">
+                <h3 className="font-semibold text-foreground mb-4">What you get:</h3>
+                <div className="space-y-3 text-left">
+                  {[
+                    'Unlimited password storage',
+                    'Secure document & photo vault',
+                    'Banking information storage',
+                    'Auto-lock & clipboard protection',
+                    'Export/Import backups',
+                    'Works on all devices'
+                  ].map((feature, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span className="text-sm text-muted-foreground">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Share Button */}
+              <Button
+                onClick={shareApp}
+                variant="outline"
+                className="mt-4"
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Share with Friends
+              </Button>
+            </div>
+          </>
+        )}
+
+        {vaultExists && (
+          <div className="text-center space-y-4 max-w-md mx-auto">
+            <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center shadow-glow">
+              <Shield className="w-8 h-8 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">SecureVault</h1>
+              <p className="text-muted-foreground">Your personal encrypted storage</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">SecureVault</h1>
-            <p className="text-muted-foreground">Your personal encrypted storage</p>
-          </div>
-        </div>
+        )}
 
         {/* Login Card */}
-        <Card className="bg-gradient-card border-border shadow-card">
+        <Card className="bg-gradient-card border-border shadow-card max-w-md mx-auto">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-semibold text-center">
-              {vaultExists ? 'Welcome Back' : 'Create Vault'}
+              {vaultExists ? 'Welcome Back' : 'Create Your Secure Vault'}
             </CardTitle>
             <CardDescription className="text-center">
               {vaultExists 
                 ? 'Enter your master password to unlock your vault'
-                : 'Set a strong master password to create your secure vault'
+                : 'Choose a strong master password - this is the only key to your data'
               }
             </CardDescription>
           </CardHeader>
@@ -108,7 +221,31 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {savedHint && (
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Hint:</strong> {savedHint}
+                  </p>
+                )}
               </div>
+
+              {!vaultExists && (
+                <div className="space-y-2">
+                  <Label htmlFor="hint" className="text-sm font-medium">
+                    Password Hint (Optional)
+                  </Label>
+                  <Input
+                    id="hint"
+                    type="text"
+                    value={hint}
+                    onChange={(e) => setHint(e.target.value)}
+                    placeholder="Something to help you remember (e.g., pet + birth year)"
+                    className="bg-background/50 border-border focus:border-primary transition-smooth"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This hint will be stored unencrypted to help you remember your password
+                  </p>
+                </div>
+              )}
 
               <Button
                 type="submit"
@@ -127,11 +264,32 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
             </form>
 
             {!vaultExists && (
-              <div className="mt-4 p-3 bg-accent/10 rounded-lg border border-accent/20">
-                <p className="text-xs text-muted-foreground">
-                  <strong>Important:</strong> Your master password cannot be recovered. 
-                  Make sure to remember it or store it safely.
-                </p>
+              <div className="mt-4 space-y-3">
+                <div className="p-3 bg-accent/10 rounded-lg border border-accent/20">
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Critical:</strong> Your master password cannot be recovered. 
+                    Make sure to remember it or store it safely.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="bg-gradient-card border border-border rounded p-3">
+                    <h4 className="font-medium text-foreground mb-1">✅ Password Tips</h4>
+                    <ul className="text-muted-foreground space-y-1">
+                      <li>• Use 12+ characters</li>
+                      <li>• Mix letters, numbers, symbols</li>
+                      <li>• Make it memorable to you</li>
+                    </ul>
+                  </div>
+                  <div className="bg-gradient-card border border-border rounded p-3">
+                    <h4 className="font-medium text-foreground mb-1">🔒 Security</h4>
+                    <ul className="text-muted-foreground space-y-1">
+                      <li>• AES-256 encryption</li>
+                      <li>• Zero-knowledge design</li>
+                      <li>• Offline-first security</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>

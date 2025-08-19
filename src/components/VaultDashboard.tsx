@@ -70,7 +70,15 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
         ? items.map(i => i.id === editingItem.id ? item : i)
         : [...items, item];
       
-      await IndexedDBStorage.saveVault(updatedItems, masterPassword);
+      // Check if we have a pending hint for new vault creation
+      const pendingHint = localStorage.getItem('pendingHint');
+      if (pendingHint && items.length === 0) {
+        await IndexedDBStorage.saveVault(updatedItems, masterPassword, pendingHint);
+        localStorage.removeItem('pendingHint');
+      } else {
+        await IndexedDBStorage.saveVault(updatedItems, masterPassword);
+      }
+      
       setItems(updatedItems);
       setShowAddForm(false);
       setEditingItem(null);

@@ -52,6 +52,17 @@ export const VaultItemCard = ({ item, onEdit, onDelete }: VaultItemCardProps) =>
         description: `${label} copied to clipboard`,
         variant: "default"
       });
+
+      // Auto-clear clipboard after 20 seconds for sensitive data (passwords, account numbers)
+      if (label.toLowerCase().includes('password') || label.toLowerCase().includes('account')) {
+        setTimeout(async () => {
+          try {
+            await navigator.clipboard.writeText('');
+          } catch (error) {
+            // Ignore clipboard clear errors
+          }
+        }, 20000);
+      }
     } catch (error) {
       toast({
         title: "Error",

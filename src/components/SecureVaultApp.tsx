@@ -19,9 +19,15 @@ export const SecureVaultApp = () => {
     setMasterPassword('');
   }, []);
 
-  const handleLogin = (password: string) => {
+  const handleLogin = (password: string, hint?: string) => {
     setMasterPassword(password);
     setIsAuthenticated(true);
+    
+    // If hint is provided, it means we're creating a new vault
+    if (hint) {
+      // The hint will be saved when the first item is saved
+      localStorage.setItem('pendingHint', hint);
+    }
   };
 
   const handleLogout = () => {
