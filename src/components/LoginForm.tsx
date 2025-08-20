@@ -36,17 +36,19 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password.trim()) return;
-
+    
     setIsLoading(true);
     try {
       if (vaultExists) {
         const isValid = await IndexedDBStorage.verifyMasterPassword(password);
         if (!isValid) {
+          const hint = await IndexedDBStorage.getPasswordHint();
           toast({
             title: "Invalid Password",
-            description: "The master password you entered is incorrect.",
+            description: hint ? `Hint: ${hint}` : "The master password you entered is incorrect.",
             variant: "destructive"
           });
+          setIsLoading(false);
           return;
         }
       }
@@ -61,6 +63,29 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResetVault = async () => {
+    if (confirm('Are you sure you want to delete all vault data? This cannot be undone!')) {
+      try {
+        await IndexedDBStorage.clearVault();
+        setVaultExists(false);
+        setSavedHint(null);
+        setPassword('');
+        setHint('');
+        toast({
+          title: "Vault Reset",
+          description: "All vault data has been cleared. You can now create a new vault.",
+          variant: "default"
+        });
+      } catch (error) {
+        toast({
+          title: "Reset Failed",
+          description: "Failed to clear vault data",
+          variant: "destructive"
+        });
+      }
     }
   };
 
@@ -327,6 +352,16 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
                         <strong className="text-accent">Hint:</strong> {savedHint}
                       </p>
                     )}
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-secondary/20 text-center">
+                    <button
+                      type="button"
+                      onClick={handleResetVault}
+                      className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      Forgot password? Reset vault (deletes all data)
+                    </button>
                   </div>
 
                   <Button
