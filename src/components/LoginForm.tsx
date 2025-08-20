@@ -47,18 +47,19 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
             description: "The master password you entered is incorrect.",
             variant: "destructive"
           });
-          setIsLoading(false);
           return;
         }
       }
       
       onLogin(password, vaultExists ? undefined : hint);
     } catch (error) {
+      console.error('Authentication error:', error);
       toast({
         title: "Authentication Failed",
         description: "Unable to verify your master password.",
         variant: "destructive"
       });
+    } finally {
       setIsLoading(false);
     }
   };

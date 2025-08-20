@@ -25,13 +25,14 @@ import { CryptoService } from '@/services/crypto';
 
 interface VaultItemFormProps {
   item?: VaultItem | null;
+  defaultType?: 'password' | 'note' | 'document' | 'bank';
   onSave: (item: VaultItem) => void;
   onCancel: () => void;
 }
 
-export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) => {
+export const VaultItemForm = ({ item, defaultType = 'password', onSave, onCancel }: VaultItemFormProps) => {
   const [type, setType] = useState<'password' | 'note' | 'document' | 'bank'>(
-    item?.type || 'password'
+    item?.type || defaultType
   );
   const [title, setTitle] = useState(item?.title || '');
   const [formData, setFormData] = useState<any>(item?.data || {});
@@ -56,6 +57,7 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
     // Handle file upload for documents
     if (type === 'document' && uploadedFile) {
       if (!IndexedDBStorage.validateFileSize(uploadedFile.size)) {
+        console.error('File size validation failed:', uploadedFile.size);
         alert('File size must be less than 2MB');
         return;
       }
@@ -70,6 +72,7 @@ export const VaultItemForm = ({ item, onSave, onCancel }: VaultItemFormProps) =>
           notes: processedData.notes || ''
         };
       } catch (error) {
+        console.error('File processing error:', error);
         alert('Failed to process file');
         return;
       }

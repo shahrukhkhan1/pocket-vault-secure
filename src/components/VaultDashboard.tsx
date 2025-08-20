@@ -54,9 +54,10 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       const vaultItems = await IndexedDBStorage.loadVault(masterPassword);
       setItems(vaultItems);
     } catch (error) {
+      console.error('Load vault error:', error);
       toast({
         title: "Error",
-        description: "Failed to load vault data",
+        description: `Failed to load vault data: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive"
       });
     } finally {
@@ -89,9 +90,10 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
         variant: "default"
       });
     } catch (error) {
+      console.error('Save item error:', error);
       toast({
         title: "Error",
-        description: "Failed to save item",
+        description: `Failed to save item: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive"
       });
     }
@@ -109,9 +111,10 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
         variant: "default"
       });
     } catch (error) {
+      console.error('Delete item error:', error);
       toast({
         title: "Error",
-        description: "Failed to delete item",
+        description: `Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive"
       });
     }
@@ -125,7 +128,9 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       const a = document.createElement('a');
       a.href = url;
       a.download = `vault-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
       toast({
@@ -134,9 +139,10 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
         variant: "default"
       });
     } catch (error) {
+      console.error('Export error:', error);
       toast({
         title: "Export Failed",
-        description: "Failed to export vault data",
+        description: `Failed to export vault data: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive"
       });
     }
@@ -153,13 +159,14 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       
       toast({
         title: "Import Complete",
-        description: "Vault data imported successfully",
+        description: `Successfully imported ${importedItems.length} items`,
         variant: "default"
       });
     } catch (error) {
+      console.error('Import error:', error);
       toast({
         title: "Import Failed",
-        description: "Failed to import vault data",
+        description: `Failed to import vault data: ${error instanceof Error ? error.message : 'Invalid file format'}`,
         variant: "destructive"
       });
     }
@@ -360,6 +367,7 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       {(showAddForm || editingItem) && (
         <VaultItemForm
           item={editingItem}
+          defaultType={selectedType !== 'all' ? selectedType as 'password' | 'note' | 'document' | 'bank' : 'password'}
           onSave={handleSaveItem}
           onCancel={() => {
             setShowAddForm(false);
