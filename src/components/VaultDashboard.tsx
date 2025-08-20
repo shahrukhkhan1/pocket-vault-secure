@@ -17,7 +17,7 @@ import {
   File
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { VaultItem, IndexedDBStorage } from '@/services/indexedDBStorage';
+import { VaultItem, IndexedDBStorage } from '../services/indexedDBStorage';
 import { useToast } from '@/hooks/use-toast';
 import { VaultItemForm } from './VaultItemForm';
 import { VaultItemCard } from './VaultItemCard';

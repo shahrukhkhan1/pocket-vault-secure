@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Shield, Lock, Eye, EyeOff, Share2, Star, Check, Zap, ShieldCheck, Smartphone } from 'lucide-react';
-import { IndexedDBStorage } from '@/services/indexedDBStorage';
+import { IndexedDBStorage } from '../services/indexedDBStorage';
 import { useToast } from '@/hooks/use-toast';
 
 interface LoginFormProps {

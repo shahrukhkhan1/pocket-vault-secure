@@ -20,7 +20,7 @@ import {
   File,
   Download
 } from 'lucide-react';
-import { VaultItem, PasswordData, NoteData, BankData, DocumentData, IndexedDBStorage } from '@/services/indexedDBStorage';
+import { VaultItem, PasswordData, NoteData, BankData, DocumentData, IndexedDBStorage } from '../services/indexedDBStorage';
 import { CryptoService } from '@/services/crypto';
 
 interface VaultItemFormProps {
