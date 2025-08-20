@@ -52,6 +52,9 @@ export class CryptoService {
    * Encrypts data using AES-GCM
    */
   static async encrypt(data: string, password: string): Promise<EncryptedData> {
+    if (!(globalThis.crypto && (globalThis.crypto as Crypto).subtle)) {
+      throw new Error('Secure Web Crypto not available. Serve over HTTPS or use a modern browser.');
+    }
     const encoder = new TextEncoder();
     const dataBuffer = encoder.encode(data);
     
@@ -83,6 +86,9 @@ export class CryptoService {
    * Decrypts data using AES-GCM
    */
   static async decrypt(encryptedData: EncryptedData, password: string): Promise<string> {
+    if (!(globalThis.crypto && (globalThis.crypto as Crypto).subtle)) {
+      throw new Error('Secure Web Crypto not available. Serve over HTTPS or use a modern browser.');
+    }
     const salt = this.base64ToArrayBuffer(encryptedData.salt);
     const iv = this.base64ToArrayBuffer(encryptedData.iv);
     const encrypted = this.base64ToArrayBuffer(encryptedData.encryptedData);

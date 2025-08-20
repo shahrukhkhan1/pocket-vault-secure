@@ -118,6 +118,7 @@ export class IndexedDBStorage {
       }
       
     } catch (error) {
+      console.error('IndexedDB saveVault error:', error);
       throw new Error('Failed to save vault data');
     }
   }
@@ -165,13 +166,16 @@ export class IndexedDBStorage {
       });
       
       if (!result) {
-        return true; // No vault exists yet
+        // If no auth record but vault exists, password should not be considered valid
+        const vaultExists = await this.hasVault();
+        return !vaultExists; // true only when no vault exists yet
       }
 
       const encrypted: EncryptedData = result;
       const decrypted = await CryptoService.decrypt(encrypted, masterPassword);
       return decrypted === 'authenticated';
     } catch (error) {
+      console.error('verifyMasterPassword error:', error);
       return false;
     }
   }
