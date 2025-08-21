@@ -1,5 +1,5 @@
 // Enhanced Service Worker for SecureVault PWA with GitHub Pages support
-const CACHE_VERSION = 'securevault-v2';
+const CACHE_VERSION = 'securevault-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 

@@ -86,36 +86,51 @@ export class IndexedDBStorage {
   static async saveVault(items: VaultItem[], masterPassword: string, hint?: string): Promise<void> {
     try {
       const db = await this.initDB();
+      
+      // Pre-compute all crypto operations before starting transaction
       const vaultData = JSON.stringify(items);
-      const encrypted = await CryptoService.encrypt(vaultData, masterPassword);
+      const encryptedVault = await CryptoService.encrypt(vaultData, masterPassword);
+      const encryptedAuth = await CryptoService.encrypt('authenticated', masterPassword);
       
-      const transaction = db.transaction([this.VAULT_STORE, this.AUTH_STORE], 'readwrite');
-      
-      // Save vault data
-      const vaultStore = transaction.objectStore(this.VAULT_STORE);
-      await new Promise((resolve, reject) => {
-        const request = vaultStore.put({ id: 'vault_data', data: encrypted });
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+      // Now perform all IndexedDB operations in a single transaction
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([this.VAULT_STORE, this.AUTH_STORE], 'readwrite');
+        let operations = 0;
+        let completedOperations = 0;
+        
+        const checkComplete = () => {
+          completedOperations++;
+          if (completedOperations === operations) {
+            resolve();
+          }
+        };
+        
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(new Error('Transaction aborted'));
+        
+        const vaultStore = transaction.objectStore(this.VAULT_STORE);
+        const authStore = transaction.objectStore(this.AUTH_STORE);
+        
+        // Save vault data
+        operations++;
+        const vaultRequest = vaultStore.put({ id: 'vault_data', data: encryptedVault });
+        vaultRequest.onsuccess = checkComplete;
+        vaultRequest.onerror = () => reject(vaultRequest.error);
+        
+        // Save auth check
+        operations++;
+        const authRequest = authStore.put(encryptedAuth, 'auth_check');
+        authRequest.onsuccess = checkComplete;
+        authRequest.onerror = () => reject(authRequest.error);
+        
+        // Save password hint if provided
+        if (hint) {
+          operations++;
+          const hintRequest = authStore.put(hint, 'password_hint');
+          hintRequest.onsuccess = checkComplete;
+          hintRequest.onerror = () => reject(hintRequest.error);
+        }
       });
-      
-      // Save auth check
-      const authCheck = await CryptoService.encrypt('authenticated', masterPassword);
-      const authStore = transaction.objectStore(this.AUTH_STORE);
-      await new Promise((resolve, reject) => {
-        const request = authStore.put(authCheck, 'auth_check');
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-
-      // Save password hint if provided
-      if (hint) {
-        await new Promise((resolve, reject) => {
-          const request = authStore.put(hint, 'password_hint');
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error);
-        });
-      }
       
     } catch (error) {
       console.error('IndexedDB saveVault error:', error);
@@ -246,23 +261,33 @@ export class IndexedDBStorage {
   static async clearVault(): Promise<void> {
     try {
       const db = await this.initDB();
-      const transaction = db.transaction([this.VAULT_STORE, this.AUTH_STORE], 'readwrite');
       
-      const vaultStore = transaction.objectStore(this.VAULT_STORE);
-      const authStore = transaction.objectStore(this.AUTH_STORE);
-      
-      await Promise.all([
-        new Promise((resolve, reject) => {
-          const request = vaultStore.clear();
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error);
-        }),
-        new Promise((resolve, reject) => {
-          const request = authStore.clear();
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error);
-        })
-      ]);
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([this.VAULT_STORE, this.AUTH_STORE], 'readwrite');
+        let operations = 2;
+        let completedOperations = 0;
+        
+        const checkComplete = () => {
+          completedOperations++;
+          if (completedOperations === operations) {
+            resolve();
+          }
+        };
+        
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(new Error('Transaction aborted'));
+        
+        const vaultStore = transaction.objectStore(this.VAULT_STORE);
+        const authStore = transaction.objectStore(this.AUTH_STORE);
+        
+        const vaultRequest = vaultStore.clear();
+        vaultRequest.onsuccess = checkComplete;
+        vaultRequest.onerror = () => reject(vaultRequest.error);
+        
+        const authRequest = authStore.clear();
+        authRequest.onsuccess = checkComplete;
+        authRequest.onerror = () => reject(authRequest.error);
+      });
     } catch (error) {
       throw new Error('Failed to clear vault data');
     }
