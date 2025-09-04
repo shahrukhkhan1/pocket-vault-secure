@@ -217,29 +217,58 @@ export class IndexedDBStorage {
   }
 
   /**
-   * Exports vault data for backup
+   * Exports vault data for backup (encrypted by default)
    */
-  static async exportVault(masterPassword: string): Promise<string> {
+  static async exportVault(masterPassword: string, encrypt: boolean = true): Promise<string> {
     const items = await this.loadVault(masterPassword);
-    return JSON.stringify({
+    const exportData = {
       version: '1.0',
       exported: new Date().toISOString(),
+      encrypted: encrypt,
       data: items
-    }, null, 2);
+    };
+
+    if (encrypt) {
+      // Encrypt the entire export data
+      const jsonString = JSON.stringify(exportData.data);
+      const encryptedData = await CryptoService.encrypt(jsonString, masterPassword);
+      return JSON.stringify({
+        ...exportData,
+        data: encryptedData
+      }, null, 2);
+    }
+
+    return JSON.stringify(exportData, null, 2);
   }
 
   /**
-   * Imports vault data from backup
+   * Imports vault data from backup (handles both encrypted and unencrypted)
    */
   static async importVault(backupData: string, masterPassword: string): Promise<VaultItem[]> {
     try {
-      const backup = JSON.parse(backupData);
-      if (!backup.data || !Array.isArray(backup.data)) {
+      const parsed = JSON.parse(backupData);
+      
+      if (!parsed.data) {
         throw new Error('Invalid backup format');
       }
-      
-      // Validate items structure
-      const items: VaultItem[] = backup.data.map((item: any) => ({
+
+      let items: VaultItem[];
+
+      if (parsed.encrypted) {
+        // Decrypt the data first
+        const decryptedString = await CryptoService.decrypt(parsed.data, masterPassword);
+        items = JSON.parse(decryptedString);
+      } else {
+        // Data is not encrypted
+        items = parsed.data;
+      }
+
+      if (!Array.isArray(items)) {
+        throw new Error('Invalid backup format');
+      }
+
+      // Validate and sanitize items
+      const validatedItems: VaultItem[] = items.map((item: any) => ({
         id: item.id || crypto.randomUUID(),
         type: item.type,
         title: item.title,
@@ -248,10 +277,12 @@ export class IndexedDBStorage {
         data: item.data
       }));
 
-      await this.saveVault(items, masterPassword);
-      return items;
+      // Import the data
+      await this.saveVault(validatedItems, masterPassword);
+      return validatedItems;
     } catch (error) {
-      throw new Error('Failed to import backup data');
+      console.error('Import error:', error);
+      throw new Error('Failed to import vault data. Please check the file format and master password.');
     }
   }
 

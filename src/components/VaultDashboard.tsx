@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,13 +14,22 @@ import {
   Upload,
   Settings,
   Lock,
-  File
+  File,
+  Cloud,
+  ChevronDown
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { VaultItem, IndexedDBStorage } from '../services/indexedDBStorage';
 import { useToast } from '@/hooks/use-toast';
 import { VaultItemForm } from './VaultItemForm';
 import { VaultItemCard } from './VaultItemCard';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 interface VaultDashboardProps {
   masterPassword: string;
@@ -36,6 +45,7 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const itemTypes = [
     { id: 'all', label: 'All Items', icon: Shield, count: items.length },
@@ -120,22 +130,22 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (encrypt: boolean = true) => {
     try {
-      const exportData = await IndexedDBStorage.exportVault(masterPassword);
+      const exportData = await IndexedDBStorage.exportVault(masterPassword, encrypt);
       const blob = new Blob([exportData], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `vault-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `vault-backup-${encrypt ? 'encrypted' : 'plaintext'}-${new Date().toISOString().split('T')[0]}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
       toast({
-        title: "Export Complete",
-        description: "Vault backup downloaded successfully",
+        title: "Export Successful",
+        description: `Your vault has been exported as ${encrypt ? 'an encrypted' : 'a plaintext'} backup file`,
         variant: "default"
       });
     } catch (error) {
@@ -143,6 +153,62 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       toast({
         title: "Export Failed",
         description: `Failed to export vault data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleCloudBackup = async () => {
+    try {
+      const exportData = await IndexedDBStorage.exportVault(masterPassword, true);
+      const blob = new Blob([exportData], { type: 'application/json' });
+      const fileName = `vault-backup-encrypted-${new Date().toISOString().split('T')[0]}.json`;
+      
+      // Try Web Share API if available
+      if (navigator.share) {
+        try {
+          // Some browsers support sharing files
+          const file = new (window as any).File([blob], fileName, { type: 'application/json' });
+          
+          if (navigator.canShare?.({ files: [file] })) {
+            await navigator.share({
+              title: 'SecureVault Encrypted Backup',
+              text: 'Encrypted vault backup - requires your master password to decrypt',
+              files: [file]
+            });
+            
+            toast({
+              title: "Backup Shared",
+              description: "Your encrypted backup has been shared to your chosen cloud service",
+              variant: "default"
+            });
+            return;
+          }
+        } catch (shareError) {
+          // Fall through to download method
+        }
+      }
+      
+      // Fallback to download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Backup Downloaded",
+        description: "Upload this encrypted file to your preferred cloud service manually",
+        variant: "default"
+      });
+    } catch (error) {
+      console.error('Cloud backup error:', error);
+      toast({
+        title: "Backup Failed",
+        description: `Failed to create cloud backup: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive"
       });
     }
@@ -158,7 +224,7 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       setItems(importedItems);
       
       toast({
-        title: "Import Complete",
+        title: "Import Complete",     
         description: `Successfully imported ${importedItems.length} items`,
         variant: "default"
       });
@@ -211,28 +277,47 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
             </div>
             
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExport}
-                className="border-border hover:bg-secondary"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-border hover:bg-secondary flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleExport(true)}>
+                    <Lock className="w-4 h-4 mr-2" />
+                    Encrypted Backup (Recommended)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport(false)}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Plaintext Backup
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleCloudBackup}>
+                    <Cloud className="w-4 h-4 mr-2" />
+                    Share to Cloud Storage
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               
               <div className="relative">
                 <Button
                   variant="outline"
                   size="sm"
                   className="border-border hover:bg-secondary"
-                  onClick={() => document.getElementById('import-file')?.click()}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <Upload className="w-4 h-4 mr-2" />
                   Import
                 </Button>
                 <input
-                  id="import-file"
+                  ref={fileInputRef}
                   type="file"
                   accept=".json"
                   onChange={handleImport}

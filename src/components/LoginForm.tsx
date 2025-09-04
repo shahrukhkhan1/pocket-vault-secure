@@ -19,6 +19,7 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
   const { toast } = useToast();
   const [vaultExists, setVaultExists] = useState(false);
   const [savedHint, setSavedHint] = useState<string | null>(null);
+  const [wrongAttempts, setWrongAttempts] = useState(0);
 
   useEffect(() => {
     const checkVault = async () => {
@@ -42,15 +43,26 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
       if (vaultExists) {
         const isValid = await IndexedDBStorage.verifyMasterPassword(password);
         if (!isValid) {
-          const hint = await IndexedDBStorage.getPasswordHint();
+          setWrongAttempts(prev => prev + 1);
+          const newAttempts = wrongAttempts + 1;
+          
+          let description = "The master password you entered is incorrect.";
+          if (newAttempts >= 2) {
+            const hint = await IndexedDBStorage.getPasswordHint();
+            if (hint) {
+              description = `Hint: ${hint}`;
+            }
+          }
+          
           toast({
             title: "Invalid Password",
-            description: hint ? `Hint: ${hint}` : "The master password you entered is incorrect.",
+            description,
             variant: "destructive"
           });
           setIsLoading(false);
           return;
         }
+        setWrongAttempts(0); // Reset on successful login
       }
       
       onLogin(password, vaultExists ? undefined : hint);
