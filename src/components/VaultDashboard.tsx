@@ -97,7 +97,8 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       toast({
         title: "Success",
         description: `${editingItem ? 'Updated' : 'Added'} ${item.type} successfully`,
-        variant: "default"
+        variant: "default",
+        duration: 3000
       });
     } catch (error) {
       console.error('Save item error:', error);
@@ -118,7 +119,8 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       toast({
         title: "Success",
         description: "Item deleted successfully",
-        variant: "default"
+        variant: "default",
+        duration: 3000
       });
     } catch (error) {
       console.error('Delete item error:', error);
@@ -146,7 +148,8 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       toast({
         title: "Export Successful",
         description: `Your vault has been exported as ${encrypt ? 'an encrypted' : 'a plaintext'} backup file`,
-        variant: "default"
+        variant: "default",
+        duration: 4000
       });
     } catch (error) {
       console.error('Export error:', error);
@@ -180,7 +183,8 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
             toast({
               title: "Backup Shared",
               description: "Your encrypted backup has been shared to your chosen cloud service",
-              variant: "default"
+              variant: "default",
+              duration: 4000
             });
             return;
           }
@@ -202,7 +206,8 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       toast({
         title: "Backup Downloaded",
         description: "Upload this encrypted file to your preferred cloud service manually",
-        variant: "default"
+        variant: "default",
+        duration: 5000
       });
     } catch (error) {
       console.error('Cloud backup error:', error);
@@ -226,7 +231,8 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
       toast({
         title: "Import Complete",     
         description: `Successfully imported ${importedItems.length} items`,
-        variant: "default"
+        variant: "default",
+        duration: 4000
       });
     } catch (error) {
       console.error('Import error:', error);
@@ -262,21 +268,22 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
     <div className="min-h-screen bg-gradient-security">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-4 py-3 md:py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center">
-                <Shield className="w-5 h-5 text-primary-foreground" />
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-primary rounded-lg flex items-center justify-center">
+                <Shield className="w-4 h-4 md:w-5 md:h-5 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-xl font-bold">SecureVault</h1>
-                <p className="text-sm text-muted-foreground">
+                <h1 className="text-lg md:text-xl font-bold">SecureVault</h1>
+                <p className="text-xs md:text-sm text-muted-foreground">
                   {items.length} encrypted {items.length === 1 ? 'item' : 'items'}
                 </p>
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            {/* Desktop Actions */}
+            <div className="hidden md:flex items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -347,14 +354,62 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
                 Lock
               </Button>
             </div>
+
+            {/* Mobile Menu */}
+            <div className="md:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="border-border hover:bg-secondary">
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => handleExport(true)}>
+                    <Lock className="w-4 h-4 mr-2" />
+                    Export Encrypted
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport(false)}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Export Plaintext
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleCloudBackup}>
+                    <Cloud className="w-4 h-4 mr-2" />
+                    Cloud Backup
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Import Backup
+                  </DropdownMenuItem>
+                  {onShowLockSettings && (
+                    <DropdownMenuItem onClick={onShowLockSettings}>
+                      <Settings className="w-4 h-4 mr-2" />
+                      Auto-Lock Settings
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onLogout} className="text-destructive">
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Lock Vault
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleImport}
+                className="hidden"
+              />
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="container mx-auto px-4 py-4 md:py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-6">
           {/* Sidebar */}
-          <div className="lg:col-span-1 space-y-4">
+          <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
             {/* Add Button */}
             <Button
               onClick={() => setShowAddForm(true)}
@@ -395,7 +450,7 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
           </div>
 
           {/* Main Content */}
-          <div className="lg:col-span-3 space-y-4">
+          <div className="lg:col-span-3 space-y-4 order-1 lg:order-2">
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -403,7 +458,7 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
                 placeholder="Search your vault..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-card/50 border-border"
+                className="pl-10 bg-card/50 border-border h-10 md:h-auto"
               />
             </div>
 
@@ -433,7 +488,7 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
                 {filteredItems.map(item => (
                   <VaultItemCard
                     key={item.id}

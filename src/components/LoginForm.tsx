@@ -89,7 +89,8 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
         toast({
           title: "Vault Reset",
           description: "All vault data has been cleared. You can now create a new vault.",
-          variant: "default"
+          variant: "default",
+          duration: 4000
         });
       } catch (error) {
         toast({
@@ -116,7 +117,8 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
         toast({
           title: "Link Copied",
           description: "Share link copied to clipboard",
-          variant: "default"
+          variant: "default",
+          duration: 3000
         });
       }
     } catch (error) {
@@ -126,7 +128,8 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
         toast({
           title: "Link Copied",
           description: "App link copied to clipboard",
-          variant: "default"
+          variant: "default",
+          duration: 3000
         });
       } catch (clipError) {
         toast({
@@ -152,11 +155,11 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
         {!vaultExists ? (
           <div className="space-y-12">
             {/* Hero Section */}
-            <div className="text-center space-y-6 max-w-4xl mx-auto">
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight">
+            <div className="text-center space-y-4 md:space-y-6 max-w-4xl mx-auto">
+              <h1 className="text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-foreground leading-tight">
                 SecureVault
               </h1>
-              <p className="text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+              <p className="text-base md:text-lg lg:text-xl xl:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed px-4">
                 Military-grade encryption meets beautiful design. Store passwords, documents, and sensitive data with complete privacy.
               </p>
             </div>
@@ -244,21 +247,21 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
             </div>
 
             {/* Features Grid */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-              <div className="bg-gradient-card border border-border rounded-xl p-6 text-center hover:shadow-secure transition-smooth">
-                <ShieldCheck className="w-12 h-12 text-primary mx-auto mb-4" />
-                <h3 className="font-bold text-foreground mb-3 text-lg">Bank-Level Security</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">AES-256 encryption with PBKDF2 key derivation ensures your data stays protected</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 max-w-5xl mx-auto">
+              <div className="bg-gradient-card border border-border rounded-xl p-4 md:p-6 text-center hover:shadow-secure transition-smooth">
+                <ShieldCheck className="w-10 h-10 md:w-12 md:h-12 text-primary mx-auto mb-3 md:mb-4" />
+                <h3 className="font-bold text-foreground mb-2 md:mb-3 text-base md:text-lg">Bank-Level Security</h3>
+                <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">AES-256 encryption with PBKDF2 key derivation ensures your data stays protected</p>
               </div>
-              <div className="bg-gradient-card border border-border rounded-xl p-6 text-center hover:shadow-secure transition-smooth">
-                <Smartphone className="w-12 h-12 text-primary mx-auto mb-4" />
-                <h3 className="font-bold text-foreground mb-3 text-lg">Works Offline</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">PWA technology means it works anywhere, anytime - no internet required</p>
+              <div className="bg-gradient-card border border-border rounded-xl p-4 md:p-6 text-center hover:shadow-secure transition-smooth">
+                <Smartphone className="w-10 h-10 md:w-12 md:h-12 text-primary mx-auto mb-3 md:mb-4" />
+                <h3 className="font-bold text-foreground mb-2 md:mb-3 text-base md:text-lg">Works Offline</h3>
+                <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">PWA technology means it works anywhere, anytime - no internet required</p>
               </div>
-              <div className="bg-gradient-card border border-border rounded-xl p-6 text-center hover:shadow-secure transition-smooth sm:col-span-2 lg:col-span-1">
-                <Zap className="w-12 h-12 text-primary mx-auto mb-4" />
-                <h3 className="font-bold text-foreground mb-3 text-lg">Zero Knowledge</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">Your data never leaves your device - complete privacy guaranteed</p>
+              <div className="bg-gradient-card border border-border rounded-xl p-4 md:p-6 text-center hover:shadow-secure transition-smooth col-span-1 sm:col-span-2 lg:col-span-1">
+                <Zap className="w-10 h-10 md:w-12 md:h-12 text-primary mx-auto mb-3 md:mb-4" />
+                <h3 className="font-bold text-foreground mb-2 md:mb-3 text-base md:text-lg">Zero Knowledge</h3>
+                <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">Your data never leaves your device - complete privacy guaranteed</p>
               </div>
             </div>
 
@@ -283,19 +286,19 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
             </div>
 
             {/* Security Tips */}
-            <div className="grid sm:grid-cols-2 gap-6 max-w-4xl mx-auto">
-              <div className="bg-gradient-card border border-border rounded-xl p-6">
-                <h4 className="font-bold text-accent mb-3 text-lg">✅ Password Tips</h4>
-                <ul className="text-muted-foreground space-y-2 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 max-w-4xl mx-auto">
+              <div className="bg-gradient-card border border-border rounded-xl p-4 md:p-6">
+                <h4 className="font-bold text-accent mb-3 text-base md:text-lg">✅ Password Tips</h4>
+                <ul className="text-muted-foreground space-y-1.5 md:space-y-2 text-xs md:text-sm">
                   <li>• Use 12+ characters minimum</li>
                   <li>• Mix letters, numbers, symbols</li>
                   <li>• Make it memorable but unique</li>
                   <li>• Consider using a passphrase</li>
                 </ul>
               </div>
-              <div className="bg-gradient-card border border-border rounded-xl p-6">
-                <h4 className="font-bold text-accent mb-3 text-lg">🔒 Your Security</h4>
-                <ul className="text-muted-foreground space-y-2 text-sm">
+              <div className="bg-gradient-card border border-border rounded-xl p-4 md:p-6">
+                <h4 className="font-bold text-accent mb-3 text-base md:text-lg">🔒 Your Security</h4>
+                <ul className="text-muted-foreground space-y-1.5 md:space-y-2 text-xs md:text-sm">
                   <li>• AES-256 military-grade encryption</li>
                   <li>• Zero-knowledge architecture</li>
                   <li>• Offline-first security model</li>
