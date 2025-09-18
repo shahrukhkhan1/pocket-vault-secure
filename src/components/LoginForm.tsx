@@ -9,9 +9,10 @@ import { useToast } from '@/hooks/use-toast';
 
 interface LoginFormProps {
   onLogin: (password: string, hint?: string) => void;
+  onCloudAuth?: () => void;
 }
 
-export const LoginForm = ({ onLogin }: LoginFormProps) => {
+export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
   const [password, setPassword] = useState('');
   const [hint, setHint] = useState('');
   const [showPassword, setShowPassword] = useState(false);

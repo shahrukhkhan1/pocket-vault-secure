@@ -35,9 +35,19 @@ interface VaultDashboardProps {
   masterPassword: string;
   onLogout: () => void;
   onShowLockSettings?: () => void;
+  initialItems?: VaultItem[];
+  onSaveItem?: (item: VaultItem) => Promise<void>;
+  onDeleteItem?: (itemId: string) => Promise<void>;
 }
 
-export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }: VaultDashboardProps) => {
+export const VaultDashboard = ({ 
+  masterPassword, 
+  onLogout, 
+  onShowLockSettings,
+  initialItems,
+  onSaveItem: onSaveItemProp,
+  onDeleteItem: onDeleteItemProp
+}: VaultDashboardProps) => {
   const [items, setItems] = useState<VaultItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
@@ -56,8 +66,13 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
   ];
 
   useEffect(() => {
-    loadVaultData();
-  }, []);
+    if (initialItems) {
+      setItems(initialItems);
+      setIsLoading(false);
+    } else {
+      loadVaultData();
+    }
+  }, [masterPassword, initialItems]);
 
   const loadVaultData = async () => {
     try {
@@ -76,6 +91,14 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
   };
 
   const handleSaveItem = async (item: VaultItem) => {
+    if (onSaveItemProp) {
+      // Use the provided save function (for cloud sync)
+      await onSaveItemProp(item);
+      setShowAddForm(false);
+      setEditingItem(null);
+      return;
+    }
+
     try {
       const updatedItems = editingItem 
         ? items.map(i => i.id === editingItem.id ? item : i)
@@ -111,10 +134,25 @@ export const VaultDashboard = ({ masterPassword, onLogout, onShowLockSettings }:
   };
 
   const handleDeleteItem = async (itemId: string) => {
+    if (onDeleteItemProp) {
+      // Use the provided delete function (for cloud sync)
+      await onDeleteItemProp(itemId);
+      return;
+    }
+
     try {
       const updatedItems = items.filter(i => i.id !== itemId);
       await IndexedDBStorage.saveVault(updatedItems, masterPassword);
       setItems(updatedItems);
+    } catch (error) {
+      console.error('Delete item error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete item",
+        variant: "destructive"
+      });
+    }
+  };
       
       toast({
         title: "Success",

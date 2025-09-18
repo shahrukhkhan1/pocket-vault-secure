@@ -14,7 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      encrypted_vaults: {
+        Row: {
+          auth_check: Json
+          created_at: string
+          device_id: string | null
+          id: string
+          last_sync: string
+          password_hint: string | null
+          updated_at: string
+          user_id: string
+          vault_data: Json
+        }
+        Insert: {
+          auth_check: Json
+          created_at?: string
+          device_id?: string | null
+          id?: string
+          last_sync?: string
+          password_hint?: string | null
+          updated_at?: string
+          user_id: string
+          vault_data: Json
+        }
+        Update: {
+          auth_check?: Json
+          created_at?: string
+          device_id?: string | null
+          id?: string
+          last_sync?: string
+          password_hint?: string | null
+          updated_at?: string
+          user_id?: string
+          vault_data?: Json
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      recovery_codes: {
+        Row: {
+          code_hash: string
+          created_at: string
+          expires_at: string
+          id: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code_hash: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code_hash?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
