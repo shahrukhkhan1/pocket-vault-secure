@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Shield, Lock, Eye, EyeOff, Share2, Star, Check, Zap, ShieldCheck, Smartphone } from 'lucide-react';
-import { IndexedDBStorage } from '../services/indexedDBStorage';
-import { useToast } from '@/hooks/use-toast';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { AlertCircle, Shield, Lock, Key, Cloud, Fingerprint } from "lucide-react";
+import { IndexedDBStorage } from "@/services/indexedDBStorage";
+import { WebAuthnService } from "@/services/webauthn";
+import { BiometricAuth } from "./BiometricAuth";
+import { toast } from "@/hooks/use-toast";
 
 interface LoginFormProps {
   onLogin: (password: string, hint?: string) => void;
@@ -21,6 +25,8 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
   const [vaultExists, setVaultExists] = useState(false);
   const [savedHint, setSavedHint] = useState<string | null>(null);
   const [wrongAttempts, setWrongAttempts] = useState(0);
+  const [showBiometric, setShowBiometric] = useState(false);
+  const [biometricSupported, setBiometricSupported] = useState(false);
 
   useEffect(() => {
     const checkVault = async () => {
@@ -32,7 +38,14 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
         setSavedHint(hint);
       }
     };
+    
+    const checkBiometric = async () => {
+      const supported = await WebAuthnService.isPlatformAuthenticatorAvailable();
+      setBiometricSupported(supported);
+    };
+    
     checkVault();
+    checkBiometric();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -79,7 +92,20 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
     }
   };
 
-  const handleResetVault = async () => {
+  const handleBiometricLogin = async () => {
+    // For demo purposes, we'll assume the user has previously stored their master password
+    // In a real implementation, you'd use the biometric authentication to unlock a stored encrypted master password
+    const demoPassword = localStorage.getItem('demo_master_password');
+    if (demoPassword) {
+      onLogin(demoPassword);
+    } else {
+      toast({
+        title: "Setup Required",
+        description: "Please log in with your master password first to enable biometric authentication",
+        variant: "destructive"
+      });
+    }
+  };
     if (confirm('Are you sure you want to delete all vault data? This cannot be undone!')) {
       try {
         await IndexedDBStorage.clearVault();
