@@ -153,22 +153,6 @@ export const VaultDashboard = ({
       });
     }
   };
-      
-      toast({
-        title: "Success",
-        description: "Item deleted successfully",
-        variant: "default",
-        duration: 3000
-      });
-    } catch (error) {
-      console.error('Delete item error:', error);
-      toast({
-        title: "Error",
-        description: `Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
-    }
-  };
 
   const handleExport = async (encrypt: boolean = true) => {
     try {
