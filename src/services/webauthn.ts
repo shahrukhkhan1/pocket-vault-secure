@@ -200,7 +200,11 @@ export class WebAuthnService {
     // Extract public key from attestation response
     // In a real implementation, you would parse the CBOR attestation object
     // For this demo, we'll use a simplified approach
-    return btoa(String.fromCharCode(...new Uint8Array(response.publicKey!)));
+    const pubKey = response.getPublicKey?.();
+    if (pubKey) {
+      return btoa(String.fromCharCode(...new Uint8Array(pubKey)));
+    }
+    return btoa(String.fromCharCode(...new Uint8Array(response.attestationObject)));
   }
 
   private static async getDeviceName(): Promise<string> {

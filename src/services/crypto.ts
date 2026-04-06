@@ -34,7 +34,7 @@ export class CryptoService {
     return crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt: salt,
+        salt: salt as BufferSource,
         iterations: this.ITERATIONS,
         hash: 'SHA-256'
       },
@@ -77,8 +77,8 @@ export class CryptoService {
 
     return {
       encryptedData: this.arrayBufferToBase64(encryptedBuffer),
-      salt: this.arrayBufferToBase64(salt),
-      iv: this.arrayBufferToBase64(iv)
+      salt: this.arrayBufferToBase64(salt.buffer as ArrayBuffer),
+      iv: this.arrayBufferToBase64(iv.buffer as ArrayBuffer)
     };
   }
 
