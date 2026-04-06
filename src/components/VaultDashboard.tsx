@@ -210,7 +210,7 @@ export const VaultDashboard = ({
       
       if (navigator.share) {
         try {
-          const file = new File([blob], fileName, { type: 'application/json' });
+          const file = new globalThis.File([blob], fileName, { type: 'application/json' });
           
           if (navigator.canShare?.({ files: [file] })) {
             await navigator.share({
