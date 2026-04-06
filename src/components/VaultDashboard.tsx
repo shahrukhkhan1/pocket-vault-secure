@@ -2,6 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Shield, 
   Key, 
@@ -54,6 +64,7 @@ export const VaultDashboard = ({
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,7 +103,6 @@ export const VaultDashboard = ({
 
   const handleSaveItem = async (item: VaultItem) => {
     if (onSaveItemProp) {
-      // Use the provided save function (for cloud sync)
       await onSaveItemProp(item);
       setShowAddForm(false);
       setEditingItem(null);
@@ -104,7 +114,6 @@ export const VaultDashboard = ({
         ? items.map(i => i.id === editingItem.id ? item : i)
         : [...items, item];
       
-      // Check if we have a pending hint for new vault creation
       const pendingHint = localStorage.getItem('pendingHint');
       if (pendingHint && items.length === 0) {
         await IndexedDBStorage.saveVault(updatedItems, masterPassword, pendingHint);
@@ -133,17 +142,25 @@ export const VaultDashboard = ({
     }
   };
 
-  const handleDeleteItem = async (itemId: string) => {
+  const confirmDeleteItem = async () => {
+    if (!deleteItemId) return;
+
     if (onDeleteItemProp) {
-      // Use the provided delete function (for cloud sync)
-      await onDeleteItemProp(itemId);
+      await onDeleteItemProp(deleteItemId);
+      setDeleteItemId(null);
       return;
     }
 
     try {
-      const updatedItems = items.filter(i => i.id !== itemId);
+      const updatedItems = items.filter(i => i.id !== deleteItemId);
       await IndexedDBStorage.saveVault(updatedItems, masterPassword);
       setItems(updatedItems);
+      toast({
+        title: "Deleted",
+        description: "Item has been permanently removed",
+        variant: "default",
+        duration: 3000
+      });
     } catch (error) {
       console.error('Delete item error:', error);
       toast({
@@ -151,6 +168,8 @@ export const VaultDashboard = ({
         description: "Failed to delete item",
         variant: "destructive"
       });
+    } finally {
+      setDeleteItemId(null);
     }
   };
 
@@ -189,11 +208,9 @@ export const VaultDashboard = ({
       const blob = new Blob([exportData], { type: 'application/json' });
       const fileName = `vault-backup-encrypted-${new Date().toISOString().split('T')[0]}.json`;
       
-      // Try Web Share API if available
       if (navigator.share) {
         try {
-          // Some browsers support sharing files
-          const file = new (window as any).File([blob], fileName, { type: 'application/json' });
+          const file = new File([blob], fileName, { type: 'application/json' });
           
           if (navigator.canShare?.({ files: [file] })) {
             await navigator.share({
@@ -215,7 +232,6 @@ export const VaultDashboard = ({
         }
       }
       
-      // Fallback to download
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -227,7 +243,7 @@ export const VaultDashboard = ({
       
       toast({
         title: "Backup Downloaded",
-        description: "Upload this encrypted file to your preferred cloud service manually",
+        description: "Upload this encrypted file to Google Drive, Dropbox, or your preferred cloud storage",
         variant: "default",
         duration: 5000
       });
@@ -265,7 +281,6 @@ export const VaultDashboard = ({
       });
     }
     
-    // Reset file input
     event.target.value = '';
   };
 
@@ -432,10 +447,10 @@ export const VaultDashboard = ({
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-6">
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
-            {/* Add Button */}
+            {/* Add Button - visible on desktop sidebar */}
             <Button
               onClick={() => setShowAddForm(true)}
-              className="w-full bg-gradient-primary hover:shadow-secure transition-spring"
+              className="w-full bg-gradient-primary hover:shadow-secure transition-spring hidden lg:flex"
               size="lg"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -516,13 +531,24 @@ export const VaultDashboard = ({
                     key={item.id}
                     item={item}
                     onEdit={() => setEditingItem(item)}
-                    onDelete={() => handleDeleteItem(item.id)}
+                    onDelete={() => setDeleteItemId(item.id)}
                   />
                 ))}
               </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* Mobile Floating Action Button */}
+      <div className="lg:hidden fixed bottom-6 right-6 z-50">
+        <Button
+          onClick={() => setShowAddForm(true)}
+          className="w-14 h-14 rounded-full bg-gradient-primary hover:shadow-secure transition-spring shadow-lg"
+          size="icon"
+        >
+          <Plus className="w-6 h-6" />
+        </Button>
       </div>
 
       {/* Add/Edit Form Modal */}
@@ -537,6 +563,27 @@ export const VaultDashboard = ({
           }}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteItemId} onOpenChange={(open) => { if (!open) setDeleteItemId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this item from your vault. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteItem}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

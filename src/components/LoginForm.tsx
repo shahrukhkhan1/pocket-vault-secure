@@ -5,11 +5,21 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AlertCircle, Shield, Lock, Key, Cloud, Fingerprint } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { AlertCircle, Shield, Lock, Key, Cloud, Fingerprint, Eye, EyeOff, ShieldCheck, Smartphone, Zap, Check, Share2 } from "lucide-react";
 import { IndexedDBStorage } from "@/services/indexedDBStorage";
 import { WebAuthnService } from "@/services/webauthn";
 import { BiometricAuth } from "./BiometricAuth";
-import { toast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 interface LoginFormProps {
   onLogin: (password: string, hint?: string) => void;
@@ -27,6 +37,7 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
   const [wrongAttempts, setWrongAttempts] = useState(0);
   const [showBiometric, setShowBiometric] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
 
   useEffect(() => {
     const checkVault = async () => {
@@ -76,7 +87,7 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
           setIsLoading(false);
           return;
         }
-        setWrongAttempts(0); // Reset on successful login
+        setWrongAttempts(0);
       }
       
       onLogin(password, vaultExists ? undefined : hint);
@@ -93,8 +104,6 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
   };
 
   const handleBiometricLogin = async () => {
-    // For demo purposes, we'll assume the user has previously stored their master password
-    // In a real implementation, you'd use the biometric authentication to unlock a stored encrypted master password
     const demoPassword = localStorage.getItem('demo_master_password');
     if (demoPassword) {
       onLogin(demoPassword);
@@ -106,26 +115,27 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
       });
     }
   };
-    if (confirm('Are you sure you want to delete all vault data? This cannot be undone!')) {
-      try {
-        await IndexedDBStorage.clearVault();
-        setVaultExists(false);
-        setSavedHint(null);
-        setPassword('');
-        setHint('');
-        toast({
-          title: "Vault Reset",
-          description: "All vault data has been cleared. You can now create a new vault.",
-          variant: "default",
-          duration: 4000
-        });
-      } catch (error) {
-        toast({
-          title: "Reset Failed",
-          description: "Failed to clear vault data",
-          variant: "destructive"
-        });
-      }
+
+  const handleResetVault = async () => {
+    try {
+      await IndexedDBStorage.clearVault();
+      setVaultExists(false);
+      setSavedHint(null);
+      setPassword('');
+      setHint('');
+      setShowResetDialog(false);
+      toast({
+        title: "Vault Reset",
+        description: "All vault data has been cleared. You can now create a new vault.",
+        variant: "default",
+        duration: 4000
+      });
+    } catch (error) {
+      toast({
+        title: "Reset Failed",
+        description: "Failed to clear vault data",
+        variant: "destructive"
+      });
     }
   };
 
@@ -149,7 +159,6 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
         });
       }
     } catch (error) {
-      // Fallback - copy to clipboard
       try {
         await navigator.clipboard.writeText(shareData.url);
         toast({
@@ -191,7 +200,7 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
               </p>
             </div>
 
-            {/* Create Vault Card - Prominently Placed */}
+            {/* Create Vault Card */}
             <div className="max-w-lg mx-auto">
               <Card className="bg-gradient-card border-border shadow-secure">
                 <CardHeader className="text-center space-y-3 pb-6">
@@ -262,7 +271,6 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
                     </Button>
                   </form>
 
-                  {/* Security Info */}
                   <div className="mt-6 p-4 bg-accent/10 rounded-lg border border-accent/20">
                     <p className="text-xs text-muted-foreground text-center">
                       <strong className="text-accent">Critical:</strong> Your master password cannot be recovered. 
@@ -399,7 +407,7 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
                   <div className="mt-4 pt-4 border-t border-secondary/20 text-center">
                     <button
                       type="button"
-                      onClick={handleResetVault}
+                      onClick={() => setShowResetDialog(true)}
                       className="text-xs text-muted-foreground hover:text-destructive transition-colors"
                     >
                       Forgot password? Reset vault (deletes all data)
@@ -427,11 +435,32 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
         )}
 
         {/* Security Notice */}
-        <div className="text-center text-xs text-muted-foreground max-w-md mx-auto">
+        <div className="text-center text-xs text-muted-foreground max-w-md mx-auto mt-8">
           <p className="mb-1">🔒 All data is encrypted locally using AES-256 encryption</p>
           <p>🚫 No data is ever transmitted to external servers</p>
         </div>
       </div>
+
+      {/* Reset Vault Confirmation Dialog */}
+      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Vault?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all your vault data including passwords, notes, and documents. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleResetVault}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Everything
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
