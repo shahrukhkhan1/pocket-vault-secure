@@ -49,30 +49,21 @@ export class IndexedDBStorage {
 
   private static db: IDBDatabase | null = null;
 
-  /**
-   * Initialize IndexedDB
-   */
   private static async initDB(): Promise<IDBDatabase> {
     if (this.db) return this.db;
 
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
-
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         this.db = request.result;
         resolve(this.db);
       };
-
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        
-        // Create vault store
         if (!db.objectStoreNames.contains(this.VAULT_STORE)) {
           db.createObjectStore(this.VAULT_STORE, { keyPath: 'id' });
         }
-        
-        // Create auth store
         if (!db.objectStoreNames.contains(this.AUTH_STORE)) {
           db.createObjectStore(this.AUTH_STORE);
         }
@@ -80,50 +71,34 @@ export class IndexedDBStorage {
     });
   }
 
-  /**
-   * Saves encrypted vault data to IndexedDB with optional hint
-   */
   static async saveVault(items: VaultItem[], masterPassword: string, hint?: string): Promise<void> {
     try {
       const db = await this.initDB();
-      
-      // Pre-compute all crypto operations before starting transaction
       const vaultData = JSON.stringify(items);
       const encryptedVault = await CryptoService.encrypt(vaultData, masterPassword);
       const encryptedAuth = await CryptoService.encrypt('authenticated', masterPassword);
-      
-      // Now perform all IndexedDB operations in a single transaction
+
       return new Promise((resolve, reject) => {
         const transaction = db.transaction([this.VAULT_STORE, this.AUTH_STORE], 'readwrite');
         let operations = 0;
         let completedOperations = 0;
-        
-        const checkComplete = () => {
-          completedOperations++;
-          if (completedOperations === operations) {
-            resolve();
-          }
-        };
-        
+        const checkComplete = () => { completedOperations++; if (completedOperations === operations) resolve(); };
         transaction.onerror = () => reject(transaction.error);
         transaction.onabort = () => reject(new Error('Transaction aborted'));
-        
+
         const vaultStore = transaction.objectStore(this.VAULT_STORE);
         const authStore = transaction.objectStore(this.AUTH_STORE);
-        
-        // Save vault data
+
         operations++;
         const vaultRequest = vaultStore.put({ id: 'vault_data', data: encryptedVault });
         vaultRequest.onsuccess = checkComplete;
         vaultRequest.onerror = () => reject(vaultRequest.error);
-        
-        // Save auth check
+
         operations++;
         const authRequest = authStore.put(encryptedAuth, 'auth_check');
         authRequest.onsuccess = checkComplete;
         authRequest.onerror = () => reject(authRequest.error);
-        
-        // Save password hint if provided
+
         if (hint) {
           operations++;
           const hintRequest = authStore.put(hint, 'password_hint');
@@ -131,32 +106,25 @@ export class IndexedDBStorage {
           hintRequest.onerror = () => reject(hintRequest.error);
         }
       });
-      
     } catch (error) {
       console.error('IndexedDB saveVault error:', error);
       throw new Error('Failed to save vault data');
     }
   }
 
-  /**
-   * Loads and decrypts vault data from IndexedDB
-   */
   static async loadVault(masterPassword: string): Promise<VaultItem[]> {
     try {
       const db = await this.initDB();
       const transaction = db.transaction([this.VAULT_STORE], 'readonly');
       const store = transaction.objectStore(this.VAULT_STORE);
-      
+
       const result = await new Promise<any>((resolve, reject) => {
         const request = store.get('vault_data');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      
-      if (!result) {
-        return [];
-      }
 
+      if (!result) return [];
       const encrypted: EncryptedData = result.data;
       const decryptedData = await CryptoService.decrypt(encrypted, masterPassword);
       return JSON.parse(decryptedData);
@@ -165,25 +133,21 @@ export class IndexedDBStorage {
     }
   }
 
-  /**
-   * Verifies master password without loading full vault
-   */
   static async verifyMasterPassword(masterPassword: string): Promise<boolean> {
     try {
       const db = await this.initDB();
       const transaction = db.transaction([this.AUTH_STORE], 'readonly');
       const store = transaction.objectStore(this.AUTH_STORE);
-      
+
       const result = await new Promise<any>((resolve, reject) => {
         const request = store.get('auth_check');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      
+
       if (!result) {
-        // If no auth record but vault exists, password should not be considered valid
         const vaultExists = await this.hasVault();
-        return !vaultExists; // true only when no vault exists yet
+        return !vaultExists;
       }
 
       const encrypted: EncryptedData = result;
@@ -195,30 +159,24 @@ export class IndexedDBStorage {
     }
   }
 
-  /**
-   * Checks if a vault exists
-   */
   static async hasVault(): Promise<boolean> {
     try {
       const db = await this.initDB();
       const transaction = db.transaction([this.VAULT_STORE], 'readonly');
       const store = transaction.objectStore(this.VAULT_STORE);
-      
+
       const result = await new Promise<any>((resolve, reject) => {
         const request = store.get('vault_data');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      
+
       return !!result;
     } catch (error) {
       return false;
     }
   }
 
-  /**
-   * Exports vault data for backup (encrypted by default)
-   */
   static async exportVault(masterPassword: string, encrypt: boolean = true): Promise<string> {
     const items = await this.loadVault(masterPassword);
     const exportData = {
@@ -229,45 +187,29 @@ export class IndexedDBStorage {
     };
 
     if (encrypt) {
-      // Encrypt the entire export data
       const jsonString = JSON.stringify(exportData.data);
       const encryptedData = await CryptoService.encrypt(jsonString, masterPassword);
-      return JSON.stringify({
-        ...exportData,
-        data: encryptedData
-      }, null, 2);
+      return JSON.stringify({ ...exportData, data: encryptedData }, null, 2);
     }
 
     return JSON.stringify(exportData, null, 2);
   }
 
-  /**
-   * Imports vault data from backup (handles both encrypted and unencrypted)
-   */
   static async importVault(backupData: string, masterPassword: string): Promise<VaultItem[]> {
     try {
       const parsed = JSON.parse(backupData);
-      
-      if (!parsed.data) {
-        throw new Error('Invalid backup format');
-      }
+      if (!parsed.data) throw new Error('Invalid backup format');
 
       let items: VaultItem[];
-
       if (parsed.encrypted) {
-        // Decrypt the data first
         const decryptedString = await CryptoService.decrypt(parsed.data, masterPassword);
         items = JSON.parse(decryptedString);
       } else {
-        // Data is not encrypted
         items = parsed.data;
       }
 
-      if (!Array.isArray(items)) {
-        throw new Error('Invalid backup format');
-      }
+      if (!Array.isArray(items)) throw new Error('Invalid backup format');
 
-      // Validate and sanitize items
       const validatedItems: VaultItem[] = items.map((item: any) => ({
         id: item.id || crypto.randomUUID(),
         type: item.type,
@@ -277,7 +219,6 @@ export class IndexedDBStorage {
         data: item.data
       }));
 
-      // Import the data
       await this.saveVault(validatedItems, masterPassword);
       return validatedItems;
     } catch (error) {
@@ -287,34 +228,81 @@ export class IndexedDBStorage {
   }
 
   /**
-   * Clears all vault data
+   * Smart merge import: adds missing items from backup without removing existing ones.
+   * If an item with the same ID exists, keeps the newer version.
    */
+  static async mergeImport(backupData: string, masterPassword: string): Promise<{ added: number; updated: number; total: number }> {
+    try {
+      const parsed = JSON.parse(backupData);
+      if (!parsed.data) throw new Error('Invalid backup format');
+
+      let backupItems: VaultItem[];
+      if (parsed.encrypted) {
+        const decryptedString = await CryptoService.decrypt(parsed.data, masterPassword);
+        backupItems = JSON.parse(decryptedString);
+      } else {
+        backupItems = parsed.data;
+      }
+
+      if (!Array.isArray(backupItems)) throw new Error('Invalid backup format');
+
+      const existingItems = await this.loadVault(masterPassword);
+      const existingMap = new Map(existingItems.map(item => [item.id, item]));
+
+      let added = 0;
+      let updated = 0;
+
+      for (const backupItem of backupItems) {
+        const existing = existingMap.get(backupItem.id);
+        if (!existing) {
+          // Item doesn't exist — add it
+          existingMap.set(backupItem.id, {
+            id: backupItem.id || crypto.randomUUID(),
+            type: backupItem.type,
+            title: backupItem.title,
+            createdAt: backupItem.createdAt || new Date().toISOString(),
+            updatedAt: backupItem.updatedAt || new Date().toISOString(),
+            data: backupItem.data
+          });
+          added++;
+        } else {
+          // Item exists — keep the newer version
+          const existingDate = new Date(existing.updatedAt).getTime();
+          const backupDate = new Date(backupItem.updatedAt).getTime();
+          if (backupDate > existingDate) {
+            existingMap.set(backupItem.id, backupItem);
+            updated++;
+          }
+        }
+      }
+
+      const mergedItems = Array.from(existingMap.values());
+      await this.saveVault(mergedItems, masterPassword);
+
+      return { added, updated, total: mergedItems.length };
+    } catch (error) {
+      console.error('Merge import error:', error);
+      throw new Error('Failed to merge backup data. Please check the file format and master password.');
+    }
+  }
+
   static async clearVault(): Promise<void> {
     try {
       const db = await this.initDB();
-      
       return new Promise((resolve, reject) => {
         const transaction = db.transaction([this.VAULT_STORE, this.AUTH_STORE], 'readwrite');
-        let operations = 2;
         let completedOperations = 0;
-        
-        const checkComplete = () => {
-          completedOperations++;
-          if (completedOperations === operations) {
-            resolve();
-          }
-        };
-        
+        const checkComplete = () => { completedOperations++; if (completedOperations === 2) resolve(); };
         transaction.onerror = () => reject(transaction.error);
         transaction.onabort = () => reject(new Error('Transaction aborted'));
-        
+
         const vaultStore = transaction.objectStore(this.VAULT_STORE);
         const authStore = transaction.objectStore(this.AUTH_STORE);
-        
+
         const vaultRequest = vaultStore.clear();
         vaultRequest.onsuccess = checkComplete;
         vaultRequest.onerror = () => reject(vaultRequest.error);
-        
+
         const authRequest = authStore.clear();
         authRequest.onsuccess = checkComplete;
         authRequest.onerror = () => reject(authRequest.error);
@@ -324,22 +312,15 @@ export class IndexedDBStorage {
     }
   }
 
-  /**
-   * Validates file size for documents/photos
-   */
   static validateFileSize(fileSize: number): boolean {
     return fileSize <= this.MAX_FILE_SIZE;
   }
 
-  /**
-   * Converts file to base64 for storage
-   */
   static async fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;
-        // Remove data URL prefix
         const base64 = result.split(',')[1];
         resolve(base64);
       };
@@ -348,39 +329,85 @@ export class IndexedDBStorage {
     });
   }
 
-  /**
-   * Converts base64 back to blob for download
-   */
   static base64ToBlob(base64: string, mimeType: string): Blob {
     const byteCharacters = atob(base64);
     const byteNumbers = new Array(byteCharacters.length);
-    
     for (let i = 0; i < byteCharacters.length; i++) {
       byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
-    
     const byteArray = new Uint8Array(byteNumbers);
     return new Blob([byteArray], { type: mimeType });
   }
 
-  /**
-   * Gets password hint if exists
-   */
   static async getPasswordHint(): Promise<string | null> {
     try {
       const db = await this.initDB();
       const transaction = db.transaction([this.AUTH_STORE], 'readonly');
       const store = transaction.objectStore(this.AUTH_STORE);
-      
+
       const result = await new Promise<any>((resolve, reject) => {
         const request = store.get('password_hint');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      
+
       return result || null;
     } catch (error) {
       return null;
+    }
+  }
+
+  /**
+   * Store encrypted master password for biometric unlock
+   */
+  static async storeBiometricKey(credentialId: string, encryptedPassword: string): Promise<void> {
+    try {
+      const db = await this.initDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([this.AUTH_STORE], 'readwrite');
+        const store = transaction.objectStore(this.AUTH_STORE);
+        const request = store.put({ credentialId, encryptedPassword }, 'biometric_key');
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('Failed to store biometric key:', error);
+    }
+  }
+
+  /**
+   * Retrieve encrypted master password for biometric unlock
+   */
+  static async getBiometricKey(): Promise<{ credentialId: string; encryptedPassword: string } | null> {
+    try {
+      const db = await this.initDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([this.AUTH_STORE], 'readonly');
+        const store = transaction.objectStore(this.AUTH_STORE);
+        const request = store.get('biometric_key');
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Remove biometric key
+   */
+  static async removeBiometricKey(): Promise<void> {
+    try {
+      const db = await this.initDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([this.AUTH_STORE], 'readwrite');
+        const store = transaction.objectStore(this.AUTH_STORE);
+        const request = store.delete('biometric_key');
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('Failed to remove biometric key:', error);
     }
   }
 }

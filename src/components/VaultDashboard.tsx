@@ -1,36 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { 
-  Shield, 
-  Key, 
-  FileText, 
-  CreditCard, 
-  Plus, 
-  Search, 
-  LogOut,
-  Download,
-  Upload,
-  Settings,
-  Lock,
-  File,
-  Cloud,
-  ChevronDown
+  Shield, Key, FileText, CreditCard, Plus, Search, LogOut,
+  Download, Upload, Settings, Lock, File, Cloud, ChevronDown,
+  Merge, Replace, Info
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { VaultItem, IndexedDBStorage } from '../services/indexedDBStorage';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { VaultItemForm } from './VaultItemForm';
 import { VaultItemCard } from './VaultItemCard';
 import {
@@ -51,12 +38,8 @@ interface VaultDashboardProps {
 }
 
 export const VaultDashboard = ({ 
-  masterPassword, 
-  onLogout, 
-  onShowLockSettings,
-  initialItems,
-  onSaveItem: onSaveItemProp,
-  onDeleteItem: onDeleteItemProp
+  masterPassword, onLogout, onShowLockSettings, initialItems,
+  onSaveItem: onSaveItemProp, onDeleteItem: onDeleteItemProp
 }: VaultDashboardProps) => {
   const [items, setItems] = useState<VaultItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,9 +47,15 @@ export const VaultDashboard = ({
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
-  const { toast } = useToast();
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importFileContent, setImportFileContent] = useState<string | null>(null);
+  const [importFileName, setImportFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Undo delete state
+  const [deletedItem, setDeletedItem] = useState<VaultItem | null>(null);
+  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const itemTypes = [
     { id: 'all', label: 'All Items', icon: Shield, count: items.length },
@@ -85,17 +74,20 @@ export const VaultDashboard = ({
     }
   }, [masterPassword, initialItems]);
 
+  // Cleanup undo timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    };
+  }, []);
+
   const loadVaultData = async () => {
     try {
       const vaultItems = await IndexedDBStorage.loadVault(masterPassword);
       setItems(vaultItems);
     } catch (error) {
       console.error('Load vault error:', error);
-      toast({
-        title: "Error",
-        description: `Failed to load vault data: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
+      toast.error(`Failed to load vault data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -108,7 +100,6 @@ export const VaultDashboard = ({
       setEditingItem(null);
       return;
     }
-
     try {
       const updatedItems = editingItem 
         ? items.map(i => i.id === editingItem.id ? item : i)
@@ -125,55 +116,64 @@ export const VaultDashboard = ({
       setItems(updatedItems);
       setShowAddForm(false);
       setEditingItem(null);
-      
-      toast({
-        title: "Success",
-        description: `${editingItem ? 'Updated' : 'Added'} ${item.type} successfully`,
-        variant: "default",
-        duration: 3000
-      });
+      toast.success(`${editingItem ? 'Updated' : 'Added'} ${item.type} successfully`);
     } catch (error) {
       console.error('Save item error:', error);
-      toast({
-        title: "Error",
-        description: `Failed to save item: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
+      toast.error(`Failed to save item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
-  const confirmDeleteItem = async () => {
-    if (!deleteItemId) return;
-
+  const handleDeleteItem = useCallback(async (itemId: string) => {
     if (onDeleteItemProp) {
-      await onDeleteItemProp(deleteItemId);
-      setDeleteItemId(null);
+      await onDeleteItemProp(itemId);
       return;
     }
 
-    try {
-      const updatedItems = items.filter(i => i.id !== deleteItemId);
-      await IndexedDBStorage.saveVault(updatedItems, masterPassword);
-      setItems(updatedItems);
-      toast({
-        title: "Deleted",
-        description: "Item has been permanently removed",
-        variant: "default",
-        duration: 3000
-      });
-    } catch (error) {
-      console.error('Delete item error:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete item",
-        variant: "destructive"
-      });
-    } finally {
-      setDeleteItemId(null);
-    }
+    const itemToDelete = items.find(i => i.id === itemId);
+    if (!itemToDelete) return;
+
+    // Optimistically remove
+    const updatedItems = items.filter(i => i.id !== itemId);
+    setItems(updatedItems);
+    setDeletedItem(itemToDelete);
+
+    // Clear any previous undo timeout
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+
+    // Show undo toast
+    toast('Item deleted', {
+      description: `"${itemToDelete.title}" removed from vault`,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          // Restore the item
+          if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+          setItems(prev => [...prev, itemToDelete]);
+          setDeletedItem(null);
+          toast.success('Item restored');
+          // Re-save with restored item
+          IndexedDBStorage.saveVault([...updatedItems, itemToDelete], masterPassword).catch(console.error);
+        }
+      },
+      duration: 30000,
+    });
+
+    // Persist deletion after 30 seconds
+    undoTimeoutRef.current = setTimeout(async () => {
+      try {
+        await IndexedDBStorage.saveVault(updatedItems, masterPassword);
+        setDeletedItem(null);
+      } catch (error) {
+        console.error('Delete persist error:', error);
+      }
+    }, 30000);
+  }, [items, masterPassword, onDeleteItemProp]);
+
+  const handleExportWithInstructions = () => {
+    setShowExportDialog(true);
   };
 
-  const handleExport = async (encrypt: boolean = true) => {
+  const doExport = async (encrypt: boolean) => {
     try {
       const exportData = await IndexedDBStorage.exportVault(masterPassword, encrypt);
       const blob = new Blob([exportData], { type: 'application/json' });
@@ -185,20 +185,10 @@ export const VaultDashboard = ({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
-      toast({
-        title: "Export Successful",
-        description: `Your vault has been exported as ${encrypt ? 'an encrypted' : 'a plaintext'} backup file`,
-        variant: "default",
-        duration: 4000
-      });
+      setShowExportDialog(false);
+      toast.success(`Vault exported as ${encrypt ? 'encrypted' : 'plaintext'} backup`);
     } catch (error) {
-      console.error('Export error:', error);
-      toast({
-        title: "Export Failed",
-        description: `Failed to export vault data: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
+      toast.error(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -211,25 +201,16 @@ export const VaultDashboard = ({
       if (navigator.share) {
         try {
           const file = new globalThis.File([blob], fileName, { type: 'application/json' });
-          
           if (navigator.canShare?.({ files: [file] })) {
             await navigator.share({
               title: 'SecureVault Encrypted Backup',
               text: 'Encrypted vault backup - requires your master password to decrypt',
               files: [file]
             });
-            
-            toast({
-              title: "Backup Shared",
-              description: "Your encrypted backup has been shared to your chosen cloud service",
-              variant: "default",
-              duration: 4000
-            });
+            toast.success('Backup shared to cloud storage');
             return;
           }
-        } catch (shareError) {
-          // Fall through to download method
-        }
+        } catch {}
       }
       
       const url = URL.createObjectURL(blob);
@@ -240,48 +221,45 @@ export const VaultDashboard = ({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
-      toast({
-        title: "Backup Downloaded",
-        description: "Upload this encrypted file to Google Drive, Dropbox, or your preferred cloud storage",
-        variant: "default",
-        duration: 5000
-      });
+      toast.success('Upload this file to Google Drive, Dropbox, or your preferred cloud storage');
     } catch (error) {
-      console.error('Cloud backup error:', error);
-      toast({
-        title: "Backup Failed",
-        description: `Failed to create cloud backup: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
+      toast.error(`Backup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
-  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     try {
       const content = await file.text();
-      const importedItems = await IndexedDBStorage.importVault(content, masterPassword);
-      setItems(importedItems);
-      
-      toast({
-        title: "Import Complete",     
-        description: `Successfully imported ${importedItems.length} items`,
-        variant: "default",
-        duration: 4000
-      });
-    } catch (error) {
-      console.error('Import error:', error);
-      toast({
-        title: "Import Failed",
-        description: `Failed to import vault data: ${error instanceof Error ? error.message : 'Invalid file format'}`,
-        variant: "destructive"
-      });
+      setImportFileContent(content);
+      setImportFileName(file.name);
+      setShowImportDialog(true);
+    } catch {
+      toast.error('Failed to read file');
     }
-    
     event.target.value = '';
+  };
+
+  const handleImport = async (mode: 'replace' | 'merge') => {
+    if (!importFileContent) return;
+    try {
+      if (mode === 'merge') {
+        const result = await IndexedDBStorage.mergeImport(importFileContent, masterPassword);
+        const updatedItems = await IndexedDBStorage.loadVault(masterPassword);
+        setItems(updatedItems);
+        toast.success(`Merge complete: ${result.added} added, ${result.updated} updated, ${result.total} total items`);
+      } else {
+        const importedItems = await IndexedDBStorage.importVault(importFileContent, masterPassword);
+        setItems(importedItems);
+        toast.success(`Replaced vault with ${importedItems.length} items from backup`);
+      }
+    } catch (error) {
+      toast.error(`Import failed: ${error instanceof Error ? error.message : 'Invalid file format'}`);
+    }
+    setShowImportDialog(false);
+    setImportFileContent(null);
+    setImportFileName('');
   };
 
   const filteredItems = items.filter(item => {
@@ -304,11 +282,11 @@ export const VaultDashboard = ({
   return (
     <div className="min-h-screen bg-gradient-security">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
+      <header className="border-b border-border/50 glass sticky top-0 z-40">
         <div className="container mx-auto px-4 py-3 md:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 md:gap-3">
-              <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-primary rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-primary rounded-xl flex items-center justify-center">
                 <Shield className="w-4 h-4 md:w-5 md:h-5 text-primary-foreground" />
               </div>
               <div>
@@ -323,72 +301,37 @@ export const VaultDashboard = ({
             <div className="hidden md:flex items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-border hover:bg-secondary flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export
-                    <ChevronDown className="w-3 h-3" />
+                  <Button variant="outline" size="sm" className="border-border/50 hover:bg-secondary/10">
+                    <Download className="w-4 h-4 mr-2" />Export<ChevronDown className="w-3 h-3 ml-1" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleExport(true)}>
-                    <Lock className="w-4 h-4 mr-2" />
-                    Encrypted Backup (Recommended)
+                  <DropdownMenuItem onClick={handleExportWithInstructions}>
+                    <Lock className="w-4 h-4 mr-2" />Encrypted Backup (Recommended)
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport(false)}>
-                    <FileText className="w-4 h-4 mr-2" />
-                    Plaintext Backup
+                  <DropdownMenuItem onClick={() => doExport(false)}>
+                    <FileText className="w-4 h-4 mr-2" />Plaintext Backup
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleCloudBackup}>
-                    <Cloud className="w-4 h-4 mr-2" />
-                    Share to Cloud Storage
+                    <Cloud className="w-4 h-4 mr-2" />Share to Cloud Storage
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               
-              <div className="relative">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-border hover:bg-secondary"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Import
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".json"
-                  onChange={handleImport}
-                  className="hidden"
-                />
-              </div>
+              <Button variant="outline" size="sm" className="border-border/50 hover:bg-secondary/10" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="w-4 h-4 mr-2" />Import
+              </Button>
+              <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileSelected} className="hidden" />
               
               {onShowLockSettings && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onShowLockSettings}
-                  className="border-border hover:bg-secondary"
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
+                <Button variant="outline" size="sm" onClick={onShowLockSettings} className="border-border/50 hover:bg-secondary/10">
+                  <Settings className="w-4 h-4 mr-2" />Settings
                 </Button>
               )}
               
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onLogout}
-                className="border-border hover:bg-destructive hover:text-destructive-foreground"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Lock
+              <Button variant="outline" size="sm" onClick={onLogout} className="border-border/50 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30">
+                <LogOut className="w-4 h-4 mr-2" />Lock
               </Button>
             </div>
 
@@ -396,48 +339,22 @@ export const VaultDashboard = ({
             <div className="md:hidden">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="border-border hover:bg-secondary">
-                    <Settings className="w-4 h-4" />
-                  </Button>
+                  <Button variant="outline" size="sm" className="border-border/50"><Settings className="w-4 h-4" /></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={() => handleExport(true)}>
-                    <Lock className="w-4 h-4 mr-2" />
-                    Export Encrypted
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport(false)}>
-                    <FileText className="w-4 h-4 mr-2" />
-                    Export Plaintext
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleCloudBackup}>
-                    <Cloud className="w-4 h-4 mr-2" />
-                    Cloud Backup
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportWithInstructions}><Lock className="w-4 h-4 mr-2" />Export Encrypted</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => doExport(false)}><FileText className="w-4 h-4 mr-2" />Export Plaintext</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleCloudBackup}><Cloud className="w-4 h-4 mr-2" />Cloud Backup</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Import Backup
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" />Import Backup</DropdownMenuItem>
                   {onShowLockSettings && (
-                    <DropdownMenuItem onClick={onShowLockSettings}>
-                      <Settings className="w-4 h-4 mr-2" />
-                      Auto-Lock Settings
-                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={onShowLockSettings}><Settings className="w-4 h-4 mr-2" />Auto-Lock Settings</DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={onLogout} className="text-destructive">
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Lock Vault
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onLogout} className="text-destructive"><LogOut className="w-4 h-4 mr-2" />Lock Vault</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                onChange={handleImport}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileSelected} className="hidden" />
             </div>
           </div>
         </div>
@@ -447,39 +364,30 @@ export const VaultDashboard = ({
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-6">
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
-            {/* Add Button - visible on desktop sidebar */}
-            <Button
-              onClick={() => setShowAddForm(true)}
-              className="w-full bg-gradient-primary hover:shadow-secure transition-spring hidden lg:flex"
-              size="lg"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add New Item
+            <Button onClick={() => setShowAddForm(true)} className="w-full bg-gradient-primary hover:shadow-secure transition-all duration-300 hidden lg:flex" size="lg">
+              <Plus className="w-4 h-4 mr-2" />Add New Item
             </Button>
 
-            {/* Categories */}
-            <Card className="bg-gradient-card border-border">
+            <Card className="bg-gradient-card border-border/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">Categories</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-1">
                 {itemTypes.map(({ id, label, icon: Icon, count }) => (
                   <button
                     key={id}
                     onClick={() => setSelectedType(id)}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg transition-smooth ${
+                    className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 ${
                       selectedType === id
-                        ? 'bg-primary/20 text-primary border border-primary/20'
-                        : 'hover:bg-secondary/50 text-foreground'
+                        ? 'bg-primary/15 text-primary border border-primary/20'
+                        : 'hover:bg-secondary/5 text-foreground'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <Icon className="w-4 h-4" />
                       <span className="text-sm font-medium">{label}</span>
                     </div>
-                    <Badge variant="secondary" className="text-xs">
-                      {count}
-                    </Badge>
+                    <Badge variant="secondary" className="text-xs">{count}</Badge>
                   </button>
                 ))}
               </CardContent>
@@ -495,44 +403,40 @@ export const VaultDashboard = ({
                 placeholder="Search your vault..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-card/50 border-border h-10 md:h-auto"
+                className="pl-10 bg-card/50 border-border/50 h-11 rounded-xl focus:border-primary/50 transition-all duration-200"
               />
             </div>
 
             {/* Items Grid */}
             {filteredItems.length === 0 ? (
-              <Card className="bg-gradient-card border-border">
-                <CardContent className="text-center py-12">
-                  <Lock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <Card className="bg-gradient-card border-border/50">
+                <CardContent className="text-center py-16">
+                  <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Lock className="w-8 h-8 text-primary/50" />
+                  </div>
                   <h3 className="text-lg font-medium mb-2">
                     {searchTerm ? 'No items found' : 'Your vault is empty'}
                   </h3>
-                  <p className="text-muted-foreground mb-4">
-                    {searchTerm 
-                      ? 'Try adjusting your search terms' 
-                      : 'Start by adding your first password, note, or document'
-                    }
+                  <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+                    {searchTerm ? 'Try adjusting your search terms' : 'Start by adding your first password, note, or document'}
                   </p>
                   {!searchTerm && (
-                    <Button
-                      onClick={() => setShowAddForm(true)}
-                      className="bg-gradient-primary hover:shadow-secure transition-spring"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add First Item
+                    <Button onClick={() => setShowAddForm(true)} className="bg-gradient-primary hover:shadow-secure transition-all duration-300">
+                      <Plus className="w-4 h-4 mr-2" />Add First Item
                     </Button>
                   )}
                 </CardContent>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
-                {filteredItems.map(item => (
-                  <VaultItemCard
-                    key={item.id}
-                    item={item}
-                    onEdit={() => setEditingItem(item)}
-                    onDelete={() => setDeleteItemId(item.id)}
-                  />
+                {filteredItems.map((item, index) => (
+                  <div key={item.id} className="animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
+                    <VaultItemCard
+                      item={item}
+                      onEdit={() => setEditingItem(item)}
+                      onDelete={() => handleDeleteItem(item.id)}
+                    />
+                  </div>
                 ))}
               </div>
             )}
@@ -540,11 +444,11 @@ export const VaultDashboard = ({
         </div>
       </div>
 
-      {/* Mobile Floating Action Button */}
+      {/* Mobile FAB */}
       <div className="lg:hidden fixed bottom-6 right-6 z-50">
         <Button
           onClick={() => setShowAddForm(true)}
-          className="w-14 h-14 rounded-full bg-gradient-primary hover:shadow-secure transition-spring shadow-lg"
+          className="w-14 h-14 rounded-2xl bg-gradient-primary fab-shadow hover:scale-105 active:scale-95 transition-all duration-200"
           size="icon"
         >
           <Plus className="w-6 h-6" />
@@ -557,33 +461,85 @@ export const VaultDashboard = ({
           item={editingItem}
           defaultType={selectedType !== 'all' ? selectedType as 'password' | 'note' | 'document' | 'bank' : 'password'}
           onSave={handleSaveItem}
-          onCancel={() => {
-            setShowAddForm(false);
-            setEditingItem(null);
-          }}
+          onCancel={() => { setShowAddForm(false); setEditingItem(null); }}
         />
       )}
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteItemId} onOpenChange={(open) => { if (!open) setDeleteItemId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Item?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete this item from your vault. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteItem}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+      {/* Export Instructions Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="w-5 h-5 text-primary" />
+              Backup Instructions
+            </DialogTitle>
+            <DialogDescription>
+              How to restore this backup on another device
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-medium text-foreground">To restore on another device:</p>
+              <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                <li>Open SecureVault on your new device</li>
+                <li>Click <strong className="text-foreground">Import Backup</strong></li>
+                <li>Select the downloaded backup file</li>
+                <li>Enter <strong className="text-foreground">the same master password</strong> you use now</li>
+              </ol>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              ⚠️ You must remember your master password — it cannot be recovered
+            </p>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>Cancel</Button>
+            <Button onClick={() => doExport(true)} className="bg-gradient-primary">
+              <Download className="w-4 h-4 mr-2" />Download Encrypted Backup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Mode Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={(open) => { if (!open) { setShowImportDialog(false); setImportFileContent(null); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Backup</DialogTitle>
+            <DialogDescription>
+              How would you like to import "{importFileName}"?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <button
+              onClick={() => handleImport('merge')}
+              className="w-full p-4 border border-primary/30 bg-primary/5 rounded-xl text-left hover:bg-primary/10 transition-all duration-200 group"
             >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              <div className="flex items-center gap-3 mb-1">
+                <Merge className="w-5 h-5 text-primary" />
+                <span className="font-medium text-foreground">Merge (Recommended)</span>
+              </div>
+              <p className="text-xs text-muted-foreground ml-8">
+                Add missing items from backup without removing your current items. Keeps the newer version of duplicates.
+              </p>
+            </button>
+            <button
+              onClick={() => handleImport('replace')}
+              className="w-full p-4 border border-border rounded-xl text-left hover:bg-destructive/5 hover:border-destructive/30 transition-all duration-200"
+            >
+              <div className="flex items-center gap-3 mb-1">
+                <Replace className="w-5 h-5 text-muted-foreground" />
+                <span className="font-medium text-foreground">Replace All</span>
+              </div>
+              <p className="text-xs text-muted-foreground ml-8">
+                Remove all current items and replace with backup data.
+              </p>
+            </button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowImportDialog(false); setImportFileContent(null); }}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

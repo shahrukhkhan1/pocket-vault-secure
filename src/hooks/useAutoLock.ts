@@ -1,77 +1,73 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
 interface UseAutoLockOptions {
   onLock: () => void;
   inactivityTimeout: number; // in milliseconds
   isAuthenticated: boolean;
+  lockOnHidden?: boolean; // lock immediately when tab is hidden
 }
 
-export const useAutoLock = ({ onLock, inactivityTimeout, isAuthenticated }: UseAutoLockOptions) => {
-  const timeoutRef = useRef<NodeJS.Timeout>();
-  const lastActivityRef = useRef<number>(Date.now());
+export const useAutoLock = ({ onLock, inactivityTimeout, isAuthenticated, lockOnHidden = true }: UseAutoLockOptions) => {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  const onLockRef = useRef(onLock);
+  const inactivityTimeoutRef = useRef(inactivityTimeout);
 
-  const resetTimer = () => {
-    if (!isAuthenticated) return;
-    
-    lastActivityRef.current = Date.now();
-    
+  // Keep refs in sync
+  useEffect(() => { isAuthenticatedRef.current = isAuthenticated; }, [isAuthenticated]);
+  useEffect(() => { onLockRef.current = onLock; }, [onLock]);
+  useEffect(() => { inactivityTimeoutRef.current = inactivityTimeout; }, [inactivityTimeout]);
+
+  const clearTimer = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
+      timeoutRef.current = undefined;
     }
-    
+  }, []);
+
+  const resetTimer = useCallback(() => {
+    if (!isAuthenticatedRef.current) return;
+    clearTimer();
     timeoutRef.current = setTimeout(() => {
-      onLock();
-    }, inactivityTimeout);
-  };
-
-  const handleActivity = () => {
-    resetTimer();
-  };
-
-  const handleVisibilityChange = () => {
-    if (document.hidden && isAuthenticated) {
-      // Check if we should lock immediately based on settings
-      const timeSinceLastActivity = Date.now() - lastActivityRef.current;
-      if (timeSinceLastActivity > 30000) { // 30 seconds
-        onLock();
+      if (isAuthenticatedRef.current) {
+        onLockRef.current();
       }
-    } else if (!document.hidden && isAuthenticated) {
-      resetTimer();
-    }
-  };
+    }, inactivityTimeoutRef.current);
+  }, [clearTimer]);
 
   useEffect(() => {
     if (!isAuthenticated) {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      clearTimer();
       return;
     }
 
-    // Start the timer
     resetTimer();
 
-    // Activity event listeners
+    const handleActivity = () => resetTimer();
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && isAuthenticatedRef.current && lockOnHidden) {
+        // Lock immediately when tab is hidden
+        onLockRef.current();
+      } else if (!document.hidden && isAuthenticatedRef.current) {
+        resetTimer();
+      }
+    };
+
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
     events.forEach(event => {
       document.addEventListener(event, handleActivity, { passive: true });
     });
-
-    // Visibility change listener
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      
+      clearTimer();
       events.forEach(event => {
         document.removeEventListener(event, handleActivity);
       });
-      
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isAuthenticated, inactivityTimeout]);
+  }, [isAuthenticated, inactivityTimeout, lockOnHidden, resetTimer, clearTimer]);
 
   return { resetTimer };
 };
