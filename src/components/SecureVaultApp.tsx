@@ -15,11 +15,14 @@ export const SecureVaultApp = () => {
   const { user, loading: authLoading } = useAuth();
   const [lockTimeout, setLockTimeout] = useState(() => {
     const saved = localStorage.getItem('vaultLockTimeout');
-    return saved ? parseInt(saved) : 300000; // Default 5 minutes
+    return saved ? parseInt(saved) : 300000;
+  });
+  const [lockOnHidden, setLockOnHidden] = useState(() => {
+    const saved = localStorage.getItem('vaultLockOnHidden');
+    return saved !== 'false'; // default true
   });
 
   useEffect(() => {
-    // Clear any session data on app start
     setIsAuthenticated(false);
     setMasterPassword('');
   }, []);
@@ -27,10 +30,7 @@ export const SecureVaultApp = () => {
   const handleLogin = (password: string, hint?: string) => {
     setMasterPassword(password);
     setIsAuthenticated(true);
-    
-    // If hint is provided, it means we're creating a new vault
     if (hint) {
-      // The hint will be saved when the first item is saved
       localStorage.setItem('pendingHint', hint);
     }
   };
@@ -45,11 +45,16 @@ export const SecureVaultApp = () => {
     localStorage.setItem('vaultLockTimeout', timeout.toString());
   };
 
-  // Initialize auto-lock only if timeout > 0
+  const handleLockOnHiddenChange = (value: boolean) => {
+    setLockOnHidden(value);
+    localStorage.setItem('vaultLockOnHidden', value.toString());
+  };
+
   useAutoLock({
     onLock: handleLogout,
     inactivityTimeout: lockTimeout,
-    isAuthenticated: isAuthenticated && lockTimeout > 0
+    isAuthenticated: isAuthenticated && lockTimeout > 0,
+    lockOnHidden,
   });
 
   if (showCloudAuth) {
@@ -73,7 +78,6 @@ export const SecureVaultApp = () => {
           onLogout={handleLogout}
           onShowLockSettings={() => setShowLockSettings(true)}
         />
-        
         {showLockSettings && (
           <AutoLockSettings
             currentTimeout={lockTimeout}
@@ -92,7 +96,6 @@ export const SecureVaultApp = () => {
         onLogout={handleLogout}
         onShowLockSettings={() => setShowLockSettings(true)}
       />
-      
       {showLockSettings && (
         <AutoLockSettings
           currentTimeout={lockTimeout}
