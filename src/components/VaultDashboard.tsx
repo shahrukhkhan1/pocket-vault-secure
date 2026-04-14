@@ -23,13 +23,16 @@ import {
 import { 
   Shield, Key, FileText, CreditCard, Plus, Search, LogOut,
   Download, Upload, Settings, Lock, File, Cloud, ChevronDown,
-  Merge, Replace, Info
+  Merge, Replace, Info, Star, ShieldAlert, ShieldCheck, X
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { VaultItem, IndexedDBStorage } from '../services/indexedDBStorage';
+import { VaultItem, IndexedDBStorage, PasswordData } from '../services/indexedDBStorage';
 import { toast } from 'sonner';
 import { VaultItemForm } from './VaultItemForm';
 import { VaultItemCard } from './VaultItemCard';
+import { SecureShareDialog } from './SecureShareDialog';
+import { EmergencyAccess } from './EmergencyAccess';
+import { checkPasswordBreach, BreachResult } from '@/services/breachCheck';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +57,8 @@ export const VaultDashboard = ({
   const [items, setItems] = useState<VaultItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,6 +73,18 @@ export const VaultDashboard = ({
   const [itemToDelete, setItemToDelete] = useState<VaultItem | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Sharing state
+  const [shareItem, setShareItem] = useState<VaultItem | null>(null);
+
+  // Emergency access
+  const [showEmergency, setShowEmergency] = useState(false);
+
+  // Breach monitoring
+  const [breachResults, setBreachResults] = useState<Map<string, 'safe' | 'breached' | 'unknown' | 'checking'>>(new Map());
+  const [isScanning, setIsScanning] = useState(false);
+
+  const allTags = [...new Set(items.flatMap(i => i.tags || []))].sort();
 
   const itemTypes = [
     { id: 'all', label: 'All Items', icon: Shield, count: items.length },
@@ -86,7 +103,6 @@ export const VaultDashboard = ({
     }
   }, [masterPassword, initialItems]);
 
-  // Cleanup undo timeout on unmount
   useEffect(() => {
     return () => {
       if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
@@ -135,6 +151,18 @@ export const VaultDashboard = ({
     }
   };
 
+  const handleToggleFavorite = useCallback(async (itemId: string) => {
+    const updatedItems = items.map(i => 
+      i.id === itemId ? { ...i, favorite: !i.favorite, updatedAt: new Date().toISOString() } : i
+    );
+    setItems(updatedItems);
+    try {
+      await IndexedDBStorage.saveVault(updatedItems, masterPassword);
+    } catch (error) {
+      console.error('Toggle favorite error:', error);
+    }
+  }, [items, masterPassword]);
+
   const confirmDeleteItem = useCallback((itemId: string) => {
     const item = items.find(i => i.id === itemId);
     if (!item) return;
@@ -158,7 +186,6 @@ export const VaultDashboard = ({
     setDeletedItem(deletedItemRef);
     setItemToDelete(null);
 
-    // Clear any previous undo timeout
     if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
 
     toast('Item deleted', {
@@ -176,7 +203,6 @@ export const VaultDashboard = ({
       duration: 30000,
     });
 
-    // Persist deletion after 30 seconds
     undoTimeoutRef.current = setTimeout(async () => {
       try {
         await IndexedDBStorage.saveVault(updatedItems, masterPassword);
@@ -186,6 +212,43 @@ export const VaultDashboard = ({
       }
     }, 30000);
   }, [items, masterPassword, onDeleteItemProp, itemToDelete]);
+
+  const handleSecurityScan = async () => {
+    const passwordItems = items.filter(i => i.type === 'password');
+    if (passwordItems.length === 0) {
+      toast.info('No passwords to scan');
+      return;
+    }
+
+    setIsScanning(true);
+    const results = new Map<string, 'safe' | 'breached' | 'unknown' | 'checking'>();
+    
+    // Mark all as checking
+    passwordItems.forEach(i => results.set(i.id, 'checking'));
+    setBreachResults(new Map(results));
+
+    let breachedCount = 0;
+    for (const item of passwordItems) {
+      const data = item.data as PasswordData;
+      if (data.password) {
+        const result = await checkPasswordBreach(data.password);
+        if (result.error) {
+          results.set(item.id, 'unknown');
+        } else {
+          results.set(item.id, result.breached ? 'breached' : 'safe');
+          if (result.breached) breachedCount++;
+        }
+        setBreachResults(new Map(results));
+      }
+    }
+
+    setIsScanning(false);
+    if (breachedCount > 0) {
+      toast.error(`${breachedCount} password(s) found in data breaches! Change them immediately.`);
+    } else {
+      toast.success('All passwords are safe — no breaches found!');
+    }
+  };
 
   const handleExportWithInstructions = () => {
     setShowExportDialog(true);
@@ -280,11 +343,20 @@ export const VaultDashboard = ({
     setImportFileName('');
   };
 
-  const filteredItems = items.filter(item => {
-    const matchesType = selectedType === 'all' || item.type === selectedType;
-    const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesType && matchesSearch;
-  });
+  const filteredItems = items
+    .filter(item => {
+      const matchesType = selectedType === 'all' || item.type === selectedType;
+      const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesFav = !showFavoritesOnly || item.favorite;
+      const matchesTag = !selectedTag || (item.tags || []).includes(selectedTag);
+      return matchesType && matchesSearch && matchesFav && matchesTag;
+    })
+    .sort((a, b) => {
+      // Favorites first
+      if (a.favorite && !b.favorite) return -1;
+      if (!a.favorite && b.favorite) return 1;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
 
   if (isLoading) {
     return (
@@ -317,6 +389,16 @@ export const VaultDashboard = ({
             
             {/* Desktop Actions */}
             <div className="hidden md:flex items-center gap-2">
+              <Button
+                variant="outline" size="sm"
+                onClick={handleSecurityScan}
+                disabled={isScanning}
+                className="border-border/50 hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+              >
+                <ShieldCheck className="w-4 h-4 mr-2" />
+                {isScanning ? 'Scanning...' : 'Security Scan'}
+              </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="border-border/50 hover:bg-secondary/10">
@@ -341,12 +423,24 @@ export const VaultDashboard = ({
                 <Upload className="w-4 h-4 mr-2" />Import
               </Button>
               <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileSelected} className="hidden" />
-              
-              {onShowLockSettings && (
-                <Button variant="outline" size="sm" onClick={onShowLockSettings} className="border-border/50 hover:bg-secondary/10">
-                  <Settings className="w-4 h-4 mr-2" />Settings
-                </Button>
-              )}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="border-border/50">
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {onShowLockSettings && (
+                    <DropdownMenuItem onClick={onShowLockSettings}>
+                      <Lock className="w-4 h-4 mr-2" />Auto-Lock Settings
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => setShowEmergency(true)}>
+                    <ShieldAlert className="w-4 h-4 mr-2" />Emergency Kit
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               
               <Button variant="outline" size="sm" onClick={onLogout} className="border-border/50 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30">
                 <LogOut className="w-4 h-4 mr-2" />Lock
@@ -360,14 +454,21 @@ export const VaultDashboard = ({
                   <Button variant="outline" size="sm" className="border-border/50"><Settings className="w-4 h-4" /></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={handleSecurityScan} disabled={isScanning}>
+                    <ShieldCheck className="w-4 h-4 mr-2" />{isScanning ? 'Scanning...' : 'Security Scan'}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleExportWithInstructions}><Lock className="w-4 h-4 mr-2" />Export Encrypted</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => doExport(false)}><FileText className="w-4 h-4 mr-2" />Export Plaintext</DropdownMenuItem>
                   <DropdownMenuItem onClick={handleCloudBackup}><Cloud className="w-4 h-4 mr-2" />Cloud Backup</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" />Import Backup</DropdownMenuItem>
                   {onShowLockSettings && (
-                    <DropdownMenuItem onClick={onShowLockSettings}><Settings className="w-4 h-4 mr-2" />Auto-Lock Settings</DropdownMenuItem>
+                    <DropdownMenuItem onClick={onShowLockSettings}><Lock className="w-4 h-4 mr-2" />Auto-Lock Settings</DropdownMenuItem>
                   )}
+                  <DropdownMenuItem onClick={() => setShowEmergency(true)}>
+                    <ShieldAlert className="w-4 h-4 mr-2" />Emergency Kit
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onLogout} className="text-destructive"><LogOut className="w-4 h-4 mr-2" />Lock Vault</DropdownMenuItem>
                 </DropdownMenuContent>
@@ -391,6 +492,20 @@ export const VaultDashboard = ({
                 <CardTitle className="text-sm font-medium">Categories</CardTitle>
               </CardHeader>
               <CardContent className="space-y-1">
+                {/* Favorites filter */}
+                <button
+                  onClick={() => { setShowFavoritesOnly(!showFavoritesOnly); setSelectedTag(null); }}
+                  className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 ${
+                    showFavoritesOnly ? 'bg-secondary/15 text-secondary border border-secondary/20' : 'hover:bg-secondary/5 text-foreground'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Star className={`w-4 h-4 ${showFavoritesOnly ? 'fill-secondary' : ''}`} />
+                    <span className="text-sm font-medium">Favorites</span>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">{items.filter(i => i.favorite).length}</Badge>
+                </button>
+
                 {itemTypes.map(({ id, label, icon: Icon, count }) => (
                   <button
                     key={id}
@@ -410,6 +525,37 @@ export const VaultDashboard = ({
                 ))}
               </CardContent>
             </Card>
+
+            {/* Tags */}
+            {allTags.length > 0 && (
+              <Card className="bg-gradient-card border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Tags</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allTags.map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
+                          selectedTag === tag
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                    {selectedTag && (
+                      <button onClick={() => setSelectedTag(null)} className="px-2 py-1 rounded-full text-xs text-destructive hover:bg-destructive/10">
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Main Content */}
@@ -433,12 +579,12 @@ export const VaultDashboard = ({
                     <Lock className="w-8 h-8 text-primary/50" />
                   </div>
                   <h3 className="text-lg font-medium mb-2">
-                    {searchTerm ? 'No items found' : 'Your vault is empty'}
+                    {searchTerm ? 'No items found' : showFavoritesOnly ? 'No favorites yet' : 'Your vault is empty'}
                   </h3>
                   <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-                    {searchTerm ? 'Try adjusting your search terms' : 'Start by adding your first password, note, or document'}
+                    {searchTerm ? 'Try adjusting your search terms' : showFavoritesOnly ? 'Star items to add them to favorites' : 'Start by adding your first password, note, or document'}
                   </p>
-                  {!searchTerm && (
+                  {!searchTerm && !showFavoritesOnly && (
                     <Button onClick={() => setShowAddForm(true)} className="bg-gradient-primary hover:shadow-secure transition-all duration-300">
                       <Plus className="w-4 h-4 mr-2" />Add First Item
                     </Button>
@@ -453,6 +599,9 @@ export const VaultDashboard = ({
                       item={item}
                       onEdit={() => setEditingItem(item)}
                       onDelete={() => confirmDeleteItem(item.id)}
+                      onToggleFavorite={() => handleToggleFavorite(item.id)}
+                      onShare={() => setShareItem(item)}
+                      breachStatus={breachResults.get(item.id)}
                     />
                   </div>
                 ))}
@@ -482,6 +631,23 @@ export const VaultDashboard = ({
           onCancel={() => { setShowAddForm(false); setEditingItem(null); }}
         />
       )}
+
+      {/* Secure Share Dialog */}
+      {shareItem && (
+        <SecureShareDialog
+          open={!!shareItem}
+          onOpenChange={(open) => { if (!open) setShareItem(null); }}
+          itemData={shareItem.data}
+          itemTitle={shareItem.title}
+        />
+      )}
+
+      {/* Emergency Access Dialog */}
+      <EmergencyAccess
+        open={showEmergency}
+        onOpenChange={setShowEmergency}
+        masterPassword={masterPassword}
+      />
 
       {/* Export Instructions Dialog */}
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
