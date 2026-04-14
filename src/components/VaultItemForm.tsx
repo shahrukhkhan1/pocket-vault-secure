@@ -6,12 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   X, Key, FileText, CreditCard, RefreshCw, Plus, Trash2,
-  Eye, EyeOff, Upload, File, Download, Image as ImageIcon
+  Eye, EyeOff, Upload, File, Download, Image as ImageIcon, Star, ShieldCheck
 } from 'lucide-react';
 import { VaultItem, PasswordData, NoteData, BankData, DocumentData, IndexedDBStorage } from '../services/indexedDBStorage';
 import { CryptoService } from '@/services/crypto';
+import { isValidBase32 } from '@/services/totp';
 import { toast } from 'sonner';
 
 interface VaultItemFormProps {
@@ -25,8 +27,11 @@ export const VaultItemForm = ({ item, defaultType = 'password', onSave, onCancel
   const [type, setType] = useState<'password' | 'note' | 'document' | 'bank'>(item?.type || defaultType);
   const [title, setTitle] = useState(item?.title || '');
   const [formData, setFormData] = useState<any>(item?.data || {});
-  const [tags, setTags] = useState<string[]>((item?.data as NoteData)?.tags || []);
+  const [favorite, setFavorite] = useState(item?.favorite || false);
+  const [itemTags, setItemTags] = useState<string[]>(item?.tags || []);
+  const [noteTags, setNoteTags] = useState<string[]>((item?.data as NoteData)?.tags || []);
   const [newTag, setNewTag] = useState('');
+  const [newItemTag, setNewItemTag] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
@@ -37,7 +42,7 @@ export const VaultItemForm = ({ item, defaultType = 'password', onSave, onCancel
     let processedData = { ...formData };
 
     if (type === 'note') {
-      processedData.tags = tags;
+      processedData.tags = noteTags;
     }
 
     if (type === 'document' && uploadedFile) {
@@ -60,13 +65,21 @@ export const VaultItemForm = ({ item, defaultType = 'password', onSave, onCancel
       }
     }
 
+    // Detect password change for age tracking
+    const isPasswordChanged = type === 'password' && item?.data?.password !== processedData.password;
+
     const vaultItem: VaultItem = {
       id: item?.id || crypto.randomUUID(),
       type,
       title: title.trim(),
       createdAt: item?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      data: processedData
+      data: processedData,
+      favorite,
+      tags: itemTags,
+      passwordChangedAt: isPasswordChanged
+        ? new Date().toISOString()
+        : (item?.passwordChangedAt || item?.createdAt || new Date().toISOString()),
     };
 
     onSave(vaultItem);
@@ -77,15 +90,26 @@ export const VaultItemForm = ({ item, defaultType = 'password', onSave, onCancel
     setFormData({ ...formData, password });
   };
 
-  const addTag = () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()]);
+  const addNoteTag = () => {
+    if (newTag.trim() && !noteTags.includes(newTag.trim())) {
+      setNoteTags([...noteTags, newTag.trim()]);
       setNewTag('');
     }
   };
 
-  const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
+  const removeNoteTag = (tagToRemove: string) => {
+    setNoteTags(noteTags.filter(tag => tag !== tagToRemove));
+  };
+
+  const addItemTag = () => {
+    if (newItemTag.trim() && !itemTags.includes(newItemTag.trim())) {
+      setItemTags([...itemTags, newItemTag.trim()]);
+      setNewItemTag('');
+    }
+  };
+
+  const removeItemTag = (tagToRemove: string) => {
+    setItemTags(itemTags.filter(tag => tag !== tagToRemove));
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,6 +167,23 @@ export const VaultItemForm = ({ item, defaultType = 'password', onSave, onCancel
           </Button>
         </div>
       </div>
+      {/* TOTP Secret */}
+      <div>
+        <Label htmlFor="totpSecret" className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-primary" />
+          2FA Secret (TOTP) — Optional
+        </Label>
+        <Input
+          id="totpSecret"
+          value={formData.totpSecret || ''}
+          onChange={(e) => setFormData({ ...formData, totpSecret: e.target.value.replace(/\s/g, '').toUpperCase() })}
+          placeholder="Paste your TOTP secret key (Base32)"
+          className="bg-background/50 font-mono text-xs"
+        />
+        {formData.totpSecret && !isValidBase32(formData.totpSecret) && (
+          <p className="text-xs text-destructive mt-1">Invalid Base32 secret. Check the key and try again.</p>
+        )}
+      </div>
       <div>
         <Label htmlFor="notes">Notes (Optional)</Label>
         <Textarea id="notes" value={formData.notes || ''} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Additional notes..." className="bg-background/50 min-h-[80px]" />
@@ -157,20 +198,20 @@ export const VaultItemForm = ({ item, defaultType = 'password', onSave, onCancel
         <Textarea id="content" value={formData.content || ''} onChange={(e) => setFormData({ ...formData, content: e.target.value })} placeholder="Enter your secure note..." className="bg-background/50 min-h-[200px]" required />
       </div>
       <div>
-        <Label>Tags</Label>
+        <Label>Note Tags</Label>
         <div className="space-y-2">
           <div className="flex gap-2">
-            <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} placeholder="Add tag..." className="bg-background/50" onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())} />
-            <Button type="button" variant="outline" onClick={addTag}>
+            <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} placeholder="Add tag..." className="bg-background/50" onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addNoteTag())} />
+            <Button type="button" variant="outline" onClick={addNoteTag}>
               <Plus className="w-4 h-4" />
             </Button>
           </div>
-          {tags.length > 0 && (
+          {noteTags.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {tags.map((tag, index) => (
+              {noteTags.map((tag, index) => (
                 <Badge key={index} variant="secondary" className="text-xs">
                   {tag}
-                  <button type="button" onClick={() => removeTag(tag)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                  <button type="button" onClick={() => removeNoteTag(tag)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
                 </Badge>
               ))}
             </div>
@@ -199,14 +240,9 @@ export const VaultItemForm = ({ item, defaultType = 'password', onSave, onCancel
               </div>
             ) : (
               <div className="border border-border rounded-xl overflow-hidden">
-                {/* Image preview */}
                 {isImage && formData.fileData && (
                   <div className="bg-background/30">
-                    <img
-                      src={`data:${formData.fileType};base64,${formData.fileData}`}
-                      alt={formData.fileName}
-                      className="w-full max-h-48 object-contain"
-                    />
+                    <img src={`data:${formData.fileType};base64,${formData.fileData}`} alt={formData.fileName} className="w-full max-h-48 object-contain" />
                   </div>
                 )}
                 <div className="p-4">
@@ -315,6 +351,39 @@ export const VaultItemForm = ({ item, defaultType = 'password', onSave, onCancel
               <div>
                 <Label htmlFor="title">Title</Label>
                 <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Enter a descriptive title" className="bg-background/50" required />
+              </div>
+            </div>
+
+            {/* Favorite toggle */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Checkbox id="favorite" checked={favorite} onCheckedChange={(c) => setFavorite(!!c)} />
+                <Label htmlFor="favorite" className="flex items-center gap-1 cursor-pointer text-sm">
+                  <Star className="w-3.5 h-3.5 text-secondary" /> Favorite
+                </Label>
+              </div>
+            </div>
+
+            {/* Item-level tags */}
+            <div>
+              <Label>Tags</Label>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input value={newItemTag} onChange={(e) => setNewItemTag(e.target.value)} placeholder="Add tag (e.g. Work, Personal)..." className="bg-background/50" onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addItemTag())} />
+                  <Button type="button" variant="outline" onClick={addItemTag} size="sm">
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                {itemTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {itemTags.map((tag, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {tag}
+                        <button type="button" onClick={() => removeItemTag(tag)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
