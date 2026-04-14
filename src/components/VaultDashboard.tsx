@@ -10,6 +10,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Shield, Key, FileText, CreditCard, Plus, Search, LogOut,
   Download, Upload, Settings, Lock, File, Cloud, ChevronDown,
@@ -55,6 +65,8 @@ export const VaultDashboard = ({
 
   // Undo delete state
   const [deletedItem, setDeletedItem] = useState<VaultItem | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<VaultItem | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const itemTypes = [
@@ -123,36 +135,42 @@ export const VaultDashboard = ({
     }
   };
 
-  const handleDeleteItem = useCallback(async (itemId: string) => {
+  const confirmDeleteItem = useCallback((itemId: string) => {
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+    setItemToDelete(item);
+    setShowDeleteConfirm(true);
+  }, [items]);
+
+  const handleDeleteItem = useCallback(async () => {
+    if (!itemToDelete) return;
+    setShowDeleteConfirm(false);
+
     if (onDeleteItemProp) {
-      await onDeleteItemProp(itemId);
+      await onDeleteItemProp(itemToDelete.id);
+      setItemToDelete(null);
       return;
     }
 
-    const itemToDelete = items.find(i => i.id === itemId);
-    if (!itemToDelete) return;
-
-    // Optimistically remove
-    const updatedItems = items.filter(i => i.id !== itemId);
+    const deletedItemRef = itemToDelete;
+    const updatedItems = items.filter(i => i.id !== deletedItemRef.id);
     setItems(updatedItems);
-    setDeletedItem(itemToDelete);
+    setDeletedItem(deletedItemRef);
+    setItemToDelete(null);
 
     // Clear any previous undo timeout
     if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
 
-    // Show undo toast
     toast('Item deleted', {
-      description: `"${itemToDelete.title}" removed from vault`,
+      description: `"${deletedItemRef.title}" removed from vault`,
       action: {
         label: 'Undo',
         onClick: () => {
-          // Restore the item
           if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
-          setItems(prev => [...prev, itemToDelete]);
+          setItems(prev => [...prev, deletedItemRef]);
           setDeletedItem(null);
           toast.success('Item restored');
-          // Re-save with restored item
-          IndexedDBStorage.saveVault([...updatedItems, itemToDelete], masterPassword).catch(console.error);
+          IndexedDBStorage.saveVault([...updatedItems, deletedItemRef], masterPassword).catch(console.error);
         }
       },
       duration: 30000,
@@ -167,7 +185,7 @@ export const VaultDashboard = ({
         console.error('Delete persist error:', error);
       }
     }, 30000);
-  }, [items, masterPassword, onDeleteItemProp]);
+  }, [items, masterPassword, onDeleteItemProp, itemToDelete]);
 
   const handleExportWithInstructions = () => {
     setShowExportDialog(true);
@@ -434,7 +452,7 @@ export const VaultDashboard = ({
                     <VaultItemCard
                       item={item}
                       onEdit={() => setEditingItem(item)}
-                      onDelete={() => handleDeleteItem(item.id)}
+                      onDelete={() => confirmDeleteItem(item.id)}
                     />
                   </div>
                 ))}
@@ -540,6 +558,24 @@ export const VaultDashboard = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{itemToDelete?.title}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This item will be removed from your vault. You'll have 30 seconds to undo this action.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setShowDeleteConfirm(false); setItemToDelete(null); }}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteItem} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

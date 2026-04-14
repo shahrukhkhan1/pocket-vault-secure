@@ -1,4 +1,4 @@
-import { toast } from "@/hooks/use-toast";
+import { toast } from 'sonner';
 
 export interface WebAuthnCredential {
   id: string;
@@ -24,7 +24,6 @@ export class WebAuthnService {
 
   static async isPlatformAuthenticatorAvailable(): Promise<boolean> {
     if (!await this.isSupported()) return false;
-    
     try {
       return await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
     } catch {
@@ -34,11 +33,7 @@ export class WebAuthnService {
 
   static async registerCredential(userId: string, userName: string): Promise<WebAuthnCredential | null> {
     if (!await this.isSupported()) {
-      toast({
-        title: "Not Supported",
-        description: "Biometric authentication is not supported on this device",
-        variant: "destructive"
-      });
+      toast.error('Biometric authentication is not supported on this device');
       return null;
     }
 
@@ -59,8 +54,8 @@ export class WebAuthnService {
             displayName: userName,
           },
           pubKeyCredParams: [
-            { alg: -7, type: "public-key" }, // ES256
-            { alg: -257, type: "public-key" }, // RS256
+            { alg: -7, type: "public-key" },
+            { alg: -257, type: "public-key" },
           ],
           authenticatorSelection: {
             authenticatorAttachment: "platform",
@@ -79,33 +74,25 @@ export class WebAuthnService {
       }
 
       const response = credential.response as AuthenticatorAttestationResponse;
-      const publicKey = await this.exportPublicKey(response);
+      const publicKey = this.arrayBufferToBase64url(response.attestationObject);
 
       const webAuthnCredential: WebAuthnCredential = {
         id: credential.id,
         publicKey,
         counter: 0,
-        deviceName: await this.getDeviceName(),
+        deviceName: this.getDeviceName(),
         createdAt: new Date(),
       };
 
-      // Store credential locally
       this.storeCredential(userId, webAuthnCredential);
-
-      toast({
-        title: "Success",
-        description: "Biometric authentication registered successfully",
-        variant: "default"
-      });
-
+      toast.success('Biometric authentication registered successfully');
       return webAuthnCredential;
     } catch (error) {
       console.error('WebAuthn registration error:', error);
-      toast({
-        title: "Registration Failed",
-        description: error instanceof Error ? error.message : "Failed to register biometric authentication",
-        variant: "destructive"
-      });
+      if (error instanceof Error && error.name === 'NotAllowedError') {
+        return null;
+      }
+      toast.error(error instanceof Error ? error.message : 'Failed to register biometric authentication');
       return null;
     }
   }
@@ -124,8 +111,8 @@ export class WebAuthnService {
         publicKey: {
           challenge,
           allowCredentials: credentials.map(cred => ({
-            id: this.base64ToArrayBuffer(cred.id),
-            type: "public-key",
+            id: this.base64urlToArrayBuffer(cred.id),
+            type: "public-key" as const,
           })),
           userVerification: "required",
           timeout: 60000,
@@ -136,16 +123,10 @@ export class WebAuthnService {
       
       if (!assertion) return false;
 
-      // In a real implementation, you would verify the assertion on the server
-      // For this demo, we'll just check if we have the credential stored
       const credentialExists = credentials.some(cred => cred.id === assertion.id);
       
       if (credentialExists) {
-        toast({
-          title: "Authentication Success",
-          description: "Biometric authentication successful",
-          variant: "default"
-        });
+        toast.success('Biometric authentication successful');
         return true;
       }
 
@@ -153,16 +134,11 @@ export class WebAuthnService {
     } catch (error) {
       console.error('WebAuthn authentication error:', error);
       
-      // Handle user cancellation gracefully
       if (error instanceof Error && error.name === 'NotAllowedError') {
-        return false; // User cancelled, don't show error toast
+        return false;
       }
       
-      toast({
-        title: "Authentication Failed",
-        description: "Biometric authentication failed",
-        variant: "destructive"
-      });
+      toast.error('Biometric authentication failed');
       return false;
     }
   }
@@ -196,32 +172,39 @@ export class WebAuthnService {
     }
   }
 
-  private static async exportPublicKey(response: AuthenticatorAttestationResponse): Promise<string> {
-    // Extract public key from attestation response
-    // In a real implementation, you would parse the CBOR attestation object
-    // For this demo, we'll use a simplified approach
-    const pubKey = response.getPublicKey?.();
-    if (pubKey) {
-      return btoa(String.fromCharCode(...new Uint8Array(pubKey)));
-    }
-    return btoa(String.fromCharCode(...new Uint8Array(response.attestationObject)));
-  }
-
-  private static async getDeviceName(): Promise<string> {
-    // Try to get a meaningful device name
+  private static getDeviceName(): string {
     const userAgent = navigator.userAgent;
-    
     if (userAgent.includes('iPhone')) return 'iPhone';
     if (userAgent.includes('iPad')) return 'iPad';
     if (userAgent.includes('Mac')) return 'Mac';
     if (userAgent.includes('Windows')) return 'Windows PC';
     if (userAgent.includes('Android')) return 'Android Device';
     if (userAgent.includes('Linux')) return 'Linux Device';
-    
     return 'Unknown Device';
   }
 
-  private static base64ToArrayBuffer(base64: string): ArrayBuffer {
+  /**
+   * Convert ArrayBuffer to base64url string
+   */
+  private static arrayBufferToBase64url(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  /**
+   * Convert base64url string to ArrayBuffer (handles both base64url and base64)
+   */
+  private static base64urlToArrayBuffer(base64url: string): ArrayBuffer {
+    // Convert base64url to base64
+    let base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding
+    while (base64.length % 4 !== 0) {
+      base64 += '=';
+    }
     const binaryString = atob(base64);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
