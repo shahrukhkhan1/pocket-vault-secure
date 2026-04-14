@@ -1,95 +1,83 @@
 
 
-# Production Enhancement Plan for SecureVault
+# SecureVault - Feature Enhancement Implementation Plan
 
-## Issues Identified & Solutions
+## Context
+SecureVault is an offline-first, zero-knowledge encrypted vault for passwords, notes, banking details, and documents. The previously approved feature plan (favorites/tags, clipboard auto-clear, password age tracker, TOTP authenticator, breach monitoring, secure sharing, emergency access) will now be implemented in phases.
 
-### 1. Document Attachment: View, Remove, Replace
-Currently the document form shows download/replace but no preview or remove option.
+## Phase 1: Favorites, Tags & Organization (Quick Wins)
 
-**Changes:**
-- **VaultItemForm.tsx**: Add a "Remove" button next to Replace. Add inline preview for images (render `<img>` from base64 data). For PDFs, show a clickable preview link that opens in a new tab.
-- **VaultItemCard.tsx**: Add document type rendering (currently missing — falls through to default). Show file name, size, preview thumbnail for images, and a download button.
+**What**: Add favorite toggle (star) and custom tags to all vault items. Favorites pin to top. Filter by tag.
 
-### 2. Undo Delete (30-second window)
-Instead of permanent deletion, implement soft-delete with an undo toast.
+- `src/services/indexedDBStorage.ts` -- Add `favorite: boolean` and `tags: string[]` fields to `VaultItem` interface
+- `src/components/VaultItemCard.tsx` -- Add star icon toggle, display tag badges
+- `src/components/VaultItemForm.tsx` -- Add favorite checkbox, tag input with chips
+- `src/components/VaultDashboard.tsx` -- Add "Favorites" filter, tag filter chips, sort favorites to top
 
-**Changes:**
-- **VaultDashboard.tsx**: Remove the AlertDialog confirmation. On delete, stash the deleted item in state, remove it from the list visually, and show a toast with an "Undo" action button. After 30 seconds, persist the deletion. If undo is clicked, restore the item and cancel the timeout.
+## Phase 2: Secure Clipboard Auto-Clear
 
-### 3. Apple/Google-style Smooth UI
-Polish the entire app with modern design touches.
+**What**: After copying any sensitive data, show a countdown toast and auto-clear clipboard after 30 seconds.
 
-**Changes:**
-- **index.css**: Add smooth spring transitions, subtle backdrop blurs, refined shadows, micro-animations for cards (scale on hover), smoother gradients, and better typography spacing.
-- **VaultItemCard.tsx**: Add hover lift effect, smoother reveal of action buttons, rounded corners, subtle border glow.
-- **VaultDashboard.tsx**: Add animated empty states, smoother search input transitions, staggered card entry animations.
-- **LoginForm.tsx**: Add subtle floating animation on the logo, smoother form field focus states.
+- `src/services/clipboardManager.ts` -- New service: `secureCopy(text, label)` that writes to clipboard, starts timer, clears after 30s
+- Update all `copyToClipboard` calls in `VaultItemCard.tsx` to use the new service
 
-### 4. Backup Import Instructions Before Download
-When exporting, show a dialog explaining how to restore on another device.
+## Phase 3: Password Age Tracker & Reminders
 
-**Changes:**
-- **VaultDashboard.tsx**: Before triggering the download, show a Dialog with clear instructions:
-  - "To restore this backup on another device: 1) Install SecureVault, 2) Click Import Backup, 3) Select this file, 4) Enter your master password: [the same one you use now]"
-  - Include a "Download Backup" button inside the dialog to proceed.
+**What**: Track when each password was last changed. Show green/yellow/red age indicator. Add "Needs rotation" filter.
 
-### 5. Tab Change / Minimize Lock Not Working
-**Root cause**: The `useAutoLock` hook's `handleVisibilityChange` only locks if inactive for 30 seconds when tab is hidden. Also, `useEffect` dependencies don't include the handler functions, so stale closures may prevent locking.
+- `src/services/indexedDBStorage.ts` -- Add `passwordChangedAt: string` field to VaultItem
+- `src/components/VaultItemCard.tsx` -- Show age badge (green <30d, yellow <90d, red >90d) on password items
+- `src/components/VaultDashboard.tsx` -- Add "Needs Rotation" quick filter
 
-**Changes:**
-- **useAutoLock.ts**: Fix by using `useCallback` with proper deps, or use refs for the callbacks. Make visibility change lock configurable (lock immediately on tab switch if setting is enabled). Add `lockOnHidden` option. Fix stale closure bugs by reading `isAuthenticated` from a ref.
+## Phase 4: Built-in TOTP Authenticator
 
-### 6. Biometric / FaceID / TouchID with Master Password
-Current biometric implementation stores password in localStorage (`demo_master_password`) which is insecure and not actually connected.
+**What**: Store TOTP secrets alongside passwords and display live 6-digit codes with countdown.
 
-**Changes:**
-- **LoginForm.tsx**: After successful master password login, offer to "Enable Biometric Unlock" if WebAuthn is supported. Store the master password encrypted with a device-bound key via WebAuthn credential.
-- **services/webauthn.ts**: Add methods to store and retrieve encrypted master password using platform authenticator.
-- **SecureVaultApp.tsx**: Add biometric enrollment flow after first login. Store encrypted master password in IndexedDB keyed to the WebAuthn credential ID.
-- **LoginForm.tsx**: Show a fingerprint/face button that triggers WebAuthn authentication, retrieves the encrypted password, and auto-logs in.
+- `src/services/totp.ts` -- New: RFC 6238 TOTP generation using Web Crypto API (HMAC-SHA1), no external deps
+- `src/components/TOTPDisplay.tsx` -- New: Live rotating code with circular countdown timer
+- `src/components/VaultItemForm.tsx` -- Add "TOTP Secret" field for password items
+- `src/components/VaultItemCard.tsx` -- Show live TOTP code with copy button when secret exists
 
-### 7. Reload Logs Out — Why?
-**Root cause**: `SecureVaultApp.tsx` line 21-25 explicitly clears authentication on mount:
-```
-useEffect(() => {
-    setIsAuthenticated(false);
-    setMasterPassword('');
-}, []);
-```
-This is intentional security behavior (master password is never persisted). With biometric unlock (item 6), users can quickly re-authenticate after reload without typing the password.
+## Phase 5: Breach Monitoring (HaveIBeenPwned)
 
-**Resolution**: Keep this behavior (it's a security feature). Add biometric auto-prompt on reload so the experience feels seamless. Add a brief note in the UI: "Vault locks on reload for security. Use biometric unlock for quick access."
+**What**: Check saved emails/passwords against known breaches using k-anonymity (only first 5 chars of SHA-1 hash sent).
 
-### 8. Smart Backup Import (Merge, Not Override)
-**Root cause**: `importVault()` in `indexedDBStorage.ts` line 281 calls `saveVault(validatedItems)` which fully replaces all items.
+- `src/services/breachCheck.ts` -- New: HIBP API client using k-anonymity model (privacy-safe, no full hash leaves device)
+- `src/components/BreachMonitor.tsx` -- New: Scan results UI with per-item breach status badges
+- `src/components/VaultItemCard.tsx` -- Add breach status indicator (shield icon: green/red)
+- `src/components/VaultDashboard.tsx` -- Add "Security Scan" button in toolbar
 
-**Changes:**
-- **indexedDBStorage.ts**: Add a `mergeImport` method that loads existing items, compares by ID, and only adds missing items without removing current ones.
-- **VaultDashboard.tsx**: When importing, show a dialog asking "Replace all items" or "Merge (add missing items only)". The merge option compares item IDs and timestamps — keeps newer versions, adds missing ones, never removes existing items.
+## Phase 6: Secure One-Time Sharing
+
+**What**: Generate encrypted, self-destructing links for sharing individual items. Uses URL fragment (never sent to server) for the key.
+
+- `src/services/secureShare.ts` -- New: Encrypt item data, encode as base64 in URL fragment. Recipient decrypts client-side. Time-limited via embedded expiry timestamp.
+- `src/components/SecureShare.tsx` -- New: Share dialog with expiry options (1h, 24h, 7d), optional PIN, copy link button
+- `src/components/VaultItemCard.tsx` -- Add "Share" action button
+
+## Phase 7: Emergency Access
+
+**What**: Generate a recovery kit (encrypted export + instructions PDF) that a trusted person can use with a separate emergency password.
+
+- `src/components/EmergencyAccess.tsx` -- New: UI to set emergency password, generate encrypted emergency export
+- `src/components/VaultDashboard.tsx` -- Add "Emergency Kit" option in settings menu
 
 ---
 
-## Files to Modify
+## Technical Notes
 
-| File | Changes |
-|------|---------|
-| `src/hooks/useAutoLock.ts` | Fix stale closures, add lock-on-hidden support |
-| `src/components/VaultDashboard.tsx` | Undo delete, export instructions dialog, merge import UI |
-| `src/components/VaultItemForm.tsx` | Document preview, remove attachment button |
-| `src/components/VaultItemCard.tsx` | Document type rendering with preview |
-| `src/components/SecureVaultApp.tsx` | Biometric enrollment flow, auto-prompt on reload |
-| `src/components/LoginForm.tsx` | Biometric login button, enrollment prompt |
-| `src/services/indexedDBStorage.ts` | Add mergeImport method |
-| `src/services/webauthn.ts` | Encrypted password storage with WebAuthn |
-| `src/index.css` | UI polish — animations, transitions, shadows |
+- All features remain offline-first -- no server required
+- TOTP uses Web Crypto API HMAC-SHA1 (no npm deps)
+- Breach check is the only feature requiring network (HIBP API), gracefully degrades offline
+- Secure sharing encodes everything in URL fragment -- no backend needed
+- All new data fields are backward-compatible (optional, with defaults)
 
 ## Implementation Order
-1. Fix auto-lock (visibility change bug) — quick win
-2. Smart merge import — critical data safety fix
-3. Undo delete with toast — UX improvement
-4. Document view/remove/replace — feature completion
-5. Export instructions dialog — UX improvement
-6. Biometric unlock integration — major feature
-7. UI polish pass — visual refinement
+1. Favorites & Tags
+2. Clipboard Auto-Clear
+3. Password Age Tracker
+4. TOTP Authenticator
+5. Breach Monitoring
+6. Secure One-Time Sharing
+7. Emergency Access
 
