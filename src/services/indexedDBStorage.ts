@@ -11,6 +11,9 @@ export interface VaultItem {
   createdAt: string;
   updatedAt: string;
   data: any;
+  favorite?: boolean;
+  tags?: string[];
+  passwordChangedAt?: string;
 }
 
 export interface PasswordData {
