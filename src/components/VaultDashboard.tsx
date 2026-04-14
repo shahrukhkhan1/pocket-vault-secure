@@ -452,7 +452,7 @@ export const VaultDashboard = ({
                     <VaultItemCard
                       item={item}
                       onEdit={() => setEditingItem(item)}
-                      onDelete={() => handleDeleteItem(item.id)}
+                      onDelete={() => confirmDeleteItem(item.id)}
                     />
                   </div>
                 ))}
