@@ -65,6 +65,8 @@ export const VaultDashboard = ({
 
   // Undo delete state
   const [deletedItem, setDeletedItem] = useState<VaultItem | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<VaultItem | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const itemTypes = [
@@ -133,36 +135,42 @@ export const VaultDashboard = ({
     }
   };
 
-  const handleDeleteItem = useCallback(async (itemId: string) => {
+  const confirmDeleteItem = useCallback((itemId: string) => {
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+    setItemToDelete(item);
+    setShowDeleteConfirm(true);
+  }, [items]);
+
+  const handleDeleteItem = useCallback(async () => {
+    if (!itemToDelete) return;
+    setShowDeleteConfirm(false);
+
     if (onDeleteItemProp) {
-      await onDeleteItemProp(itemId);
+      await onDeleteItemProp(itemToDelete.id);
+      setItemToDelete(null);
       return;
     }
 
-    const itemToDelete = items.find(i => i.id === itemId);
-    if (!itemToDelete) return;
-
-    // Optimistically remove
-    const updatedItems = items.filter(i => i.id !== itemId);
+    const deletedItemRef = itemToDelete;
+    const updatedItems = items.filter(i => i.id !== deletedItemRef.id);
     setItems(updatedItems);
-    setDeletedItem(itemToDelete);
+    setDeletedItem(deletedItemRef);
+    setItemToDelete(null);
 
     // Clear any previous undo timeout
     if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
 
-    // Show undo toast
     toast('Item deleted', {
-      description: `"${itemToDelete.title}" removed from vault`,
+      description: `"${deletedItemRef.title}" removed from vault`,
       action: {
         label: 'Undo',
         onClick: () => {
-          // Restore the item
           if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
-          setItems(prev => [...prev, itemToDelete]);
+          setItems(prev => [...prev, deletedItemRef]);
           setDeletedItem(null);
           toast.success('Item restored');
-          // Re-save with restored item
-          IndexedDBStorage.saveVault([...updatedItems, itemToDelete], masterPassword).catch(console.error);
+          IndexedDBStorage.saveVault([...updatedItems, deletedItemRef], masterPassword).catch(console.error);
         }
       },
       duration: 30000,
@@ -177,7 +185,7 @@ export const VaultDashboard = ({
         console.error('Delete persist error:', error);
       }
     }, 30000);
-  }, [items, masterPassword, onDeleteItemProp]);
+  }, [items, masterPassword, onDeleteItemProp, itemToDelete]);
 
   const handleExportWithInstructions = () => {
     setShowExportDialog(true);
