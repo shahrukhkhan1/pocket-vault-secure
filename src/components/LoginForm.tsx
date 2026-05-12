@@ -72,14 +72,38 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
           setWrongAttempts(prev => prev + 1);
           const newAttempts = wrongAttempts + 1;
           let description = "The master password you entered is incorrect.";
-          if (newAttempts >= 2 && savedHint) {
-            description = `Hint: ${savedHint}`;
+          if (savedHint) {
+            description += ` Hint: ${savedHint}`;
           }
           toast.error(description);
           setIsLoading(false);
           return;
         }
         setWrongAttempts(0);
+      } else {
+        // Fresh vault: persist immediately with a starter item so the master password
+        // is recoverable from inside the unlocked vault, and so that hasVault() returns true.
+        const starterItem = {
+          id: crypto.randomUUID(),
+          type: 'password' as const,
+          title: '🔑 SecureVault Master Password',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          passwordChangedAt: new Date().toISOString(),
+          favorite: true,
+          tags: ['important'],
+          data: {
+            website: 'SecureVault (this app)',
+            username: 'master',
+            password: password,
+            notes: 'This is your master password. Keep it safe. If you forget it, your encrypted data CANNOT be recovered. Take a backup export and remember this password before exporting.',
+          },
+        };
+        try {
+          await IndexedDBStorage.saveVault([starterItem], password, hint || undefined);
+        } catch (err) {
+          console.error('Initial vault save failed:', err);
+        }
       }
 
       // After successful login, check if we should offer biometric enrollment
