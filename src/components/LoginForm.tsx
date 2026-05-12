@@ -31,6 +31,7 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [vaultExists, setVaultExists] = useState(false);
   const [savedHint, setSavedHint] = useState<string | null>(null);
+  const [showHint, setShowHint] = useState(false);
   const [wrongAttempts, setWrongAttempts] = useState(0);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
@@ -72,14 +73,38 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
           setWrongAttempts(prev => prev + 1);
           const newAttempts = wrongAttempts + 1;
           let description = "The master password you entered is incorrect.";
-          if (newAttempts >= 2 && savedHint) {
-            description = `Hint: ${savedHint}`;
+          if (savedHint) {
+            description += ` Hint: ${savedHint}`;
           }
           toast.error(description);
           setIsLoading(false);
           return;
         }
         setWrongAttempts(0);
+      } else {
+        // Fresh vault: persist immediately with a starter item so the master password
+        // is recoverable from inside the unlocked vault, and so that hasVault() returns true.
+        const starterItem = {
+          id: crypto.randomUUID(),
+          type: 'password' as const,
+          title: '🔑 SecureVault Master Password',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          passwordChangedAt: new Date().toISOString(),
+          favorite: true,
+          tags: ['important'],
+          data: {
+            website: 'SecureVault (this app)',
+            username: 'master',
+            password: password,
+            notes: 'This is your master password. Keep it safe. If you forget it, your encrypted data CANNOT be recovered. Take a backup export and remember this password before exporting.',
+          },
+        };
+        try {
+          await IndexedDBStorage.saveVault([starterItem], password, hint || undefined);
+        } catch (err) {
+          console.error('Initial vault save failed:', err);
+        }
       }
 
       // After successful login, check if we should offer biometric enrollment
@@ -344,10 +369,22 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                    {savedHint && wrongAttempts >= 2 && (
-                      <p className="text-xs text-muted-foreground bg-accent/10 p-2 rounded-lg border border-accent/20">
-                        <strong className="text-accent">Hint:</strong> {savedHint}
-                      </p>
+                    {savedHint && (
+                      <div className="bg-accent/10 p-3 rounded-lg border border-accent/20 space-y-2">
+                        {showHint ? (
+                          <p className="text-xs text-foreground">
+                            <strong className="text-accent">Hint:</strong> {savedHint}
+                          </p>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setShowHint(true)}
+                            className="text-xs text-accent hover:underline"
+                          >
+                            Show password hint
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
 
