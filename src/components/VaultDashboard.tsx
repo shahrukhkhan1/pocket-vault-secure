@@ -710,6 +710,14 @@ export const VaultDashboard = ({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 space-y-2">
+              <p className="text-sm font-semibold text-destructive">⚠️ Before you export — confirm you remember your master password</p>
+              <p className="text-xs text-muted-foreground">
+                This backup is encrypted with your current master password. Without it, the file is permanently unreadable.
+                If you're not sure, cancel and go to <strong className="text-foreground">Settings → Change Master Password</strong> first
+                while you're still logged in.
+              </p>
+            </div>
             <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-3">
               <p className="text-sm font-medium text-foreground">To restore on another device:</p>
               <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
@@ -720,7 +728,7 @@ export const VaultDashboard = ({
               </ol>
             </div>
             <p className="text-xs text-muted-foreground text-center">
-              ⚠️ You must remember your master password — it cannot be recovered
+              Tip: your master password is also saved as a vault item titled "🔑 SecureVault Master Password".
             </p>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
