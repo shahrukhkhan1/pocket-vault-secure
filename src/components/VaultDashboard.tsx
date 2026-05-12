@@ -298,7 +298,9 @@ export const VaultDashboard = ({
             toast.success('Backup shared to cloud storage');
             return;
           }
-        } catch {}
+        } catch (shareError) {
+          console.debug('Native file share unavailable, falling back to download', shareError);
+        }
       }
       
       const url = URL.createObjectURL(blob);
