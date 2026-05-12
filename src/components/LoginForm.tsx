@@ -369,10 +369,22 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                    {savedHint && wrongAttempts >= 2 && (
-                      <p className="text-xs text-muted-foreground bg-accent/10 p-2 rounded-lg border border-accent/20">
-                        <strong className="text-accent">Hint:</strong> {savedHint}
-                      </p>
+                    {savedHint && (
+                      <div className="bg-accent/10 p-3 rounded-lg border border-accent/20 space-y-2">
+                        {showHint ? (
+                          <p className="text-xs text-foreground">
+                            <strong className="text-accent">Hint:</strong> {savedHint}
+                          </p>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setShowHint(true)}
+                            className="text-xs text-accent hover:underline"
+                          >
+                            Show password hint
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
 
