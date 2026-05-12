@@ -767,6 +767,65 @@ export const VaultDashboard = ({
         </DialogContent>
       </Dialog>
 
+      {/* Change Master Password Dialog */}
+      <Dialog open={showChangePasswordDialog} onOpenChange={setShowChangePasswordDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5 text-primary" />
+              Change Master Password
+            </DialogTitle>
+            <DialogDescription>
+              Re-encrypt this unlocked vault with a new password you can remember.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleChangeMasterPassword} className="space-y-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+              If you unlocked with Face ID, this lets you recover access by setting a new master password. Existing encrypted backups still need the old password unless you export a new backup after changing it.
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-master-password">New master password</Label>
+              <Input
+                id="new-master-password"
+                type="password"
+                value={newMasterPassword}
+                onChange={(event) => setNewMasterPassword(event.target.value)}
+                autoComplete="new-password"
+                className="bg-input border-border/50"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-new-master-password">Confirm new master password</Label>
+              <Input
+                id="confirm-new-master-password"
+                type="password"
+                value={confirmNewMasterPassword}
+                onChange={(event) => setConfirmNewMasterPassword(event.target.value)}
+                autoComplete="new-password"
+                className="bg-input border-border/50"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password-hint">New hint (optional)</Label>
+              <Input
+                id="new-password-hint"
+                value={newPasswordHint}
+                onChange={(event) => setNewPasswordHint(event.target.value)}
+                className="bg-input border-border/50"
+              />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowChangePasswordDialog(false)}>Cancel</Button>
+              <Button type="submit" disabled={isChangingMasterPassword} className="bg-gradient-primary">
+                {isChangingMasterPassword ? 'Changing...' : 'Change Password'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
