@@ -31,6 +31,7 @@ export const LoginForm = ({ onLogin, onCloudAuth }: LoginFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [vaultExists, setVaultExists] = useState(false);
   const [savedHint, setSavedHint] = useState<string | null>(null);
+  const [showHint, setShowHint] = useState(false);
   const [wrongAttempts, setWrongAttempts] = useState(0);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
