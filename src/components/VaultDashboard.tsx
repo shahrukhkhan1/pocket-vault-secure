@@ -350,6 +350,37 @@ export const VaultDashboard = ({
     setImportFileName('');
   };
 
+  const handleChangeMasterPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const nextPassword = newMasterPassword.trim();
+    if (nextPassword.length < 8) {
+      toast.error('Use at least 8 characters for your new master password.');
+      return;
+    }
+
+    if (nextPassword !== confirmNewMasterPassword) {
+      toast.error('New master passwords do not match.');
+      return;
+    }
+
+    try {
+      setIsChangingMasterPassword(true);
+      await IndexedDBStorage.saveVault(items, nextPassword, newPasswordHint.trim() || undefined);
+      await onMasterPasswordChange?.(nextPassword, newPasswordHint.trim() || undefined);
+      setShowChangePasswordDialog(false);
+      setNewMasterPassword('');
+      setConfirmNewMasterPassword('');
+      setNewPasswordHint('');
+      toast.success('Master password changed. New backups must use this password.');
+    } catch (error) {
+      console.error('Change master password error:', error);
+      toast.error(`Failed to change master password: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsChangingMasterPassword(false);
+    }
+  };
+
   const filteredItems = items
     .filter(item => {
       const matchesType = selectedType === 'all' || item.type === selectedType;
