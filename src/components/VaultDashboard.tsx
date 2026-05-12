@@ -367,6 +367,10 @@ export const VaultDashboard = ({
     try {
       setIsChangingMasterPassword(true);
       await IndexedDBStorage.saveVault(items, nextPassword, newPasswordHint.trim() || undefined);
+      const biometricKey = await IndexedDBStorage.getBiometricKey();
+      if (biometricKey) {
+        await IndexedDBStorage.storeBiometricKey(biometricKey.credentialId, btoa(nextPassword));
+      }
       await onMasterPasswordChange?.(nextPassword, newPasswordHint.trim() || undefined);
       setShowChangePasswordDialog(false);
       setNewMasterPassword('');
