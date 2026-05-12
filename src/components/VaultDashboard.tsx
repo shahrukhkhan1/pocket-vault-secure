@@ -474,6 +474,9 @@ export const VaultDashboard = ({
                       <Lock className="w-4 h-4 mr-2" />Auto-Lock Settings
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuItem onClick={() => setShowChangePasswordDialog(true)}>
+                    <Key className="w-4 h-4 mr-2" />Change Master Password
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setShowEmergency(true)}>
                     <ShieldAlert className="w-4 h-4 mr-2" />Emergency Kit
                   </DropdownMenuItem>
@@ -504,6 +507,7 @@ export const VaultDashboard = ({
                   {onShowLockSettings && (
                     <DropdownMenuItem onClick={onShowLockSettings}><Lock className="w-4 h-4 mr-2" />Auto-Lock Settings</DropdownMenuItem>
                   )}
+                  <DropdownMenuItem onClick={() => setShowChangePasswordDialog(true)}><Key className="w-4 h-4 mr-2" />Change Master Password</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setShowEmergency(true)}>
                     <ShieldAlert className="w-4 h-4 mr-2" />Emergency Kit
                   </DropdownMenuItem>
