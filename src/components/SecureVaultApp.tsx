@@ -40,6 +40,13 @@ export const SecureVaultApp = () => {
     setMasterPassword('');
   };
 
+  const handleMasterPasswordChange = (newPassword: string, hint?: string) => {
+    setMasterPassword(newPassword);
+    if (hint) {
+      localStorage.setItem('pendingHint', hint);
+    }
+  };
+
   const handleTimeoutChange = (timeout: number) => {
     setLockTimeout(timeout);
     localStorage.setItem('vaultLockTimeout', timeout.toString());
@@ -77,6 +84,7 @@ export const SecureVaultApp = () => {
           masterPassword={masterPassword} 
           onLogout={handleLogout}
           onShowLockSettings={() => setShowLockSettings(true)}
+          onMasterPasswordChange={handleMasterPasswordChange}
         />
         {showLockSettings && (
           <AutoLockSettings
@@ -95,6 +103,7 @@ export const SecureVaultApp = () => {
         masterPassword={masterPassword} 
         onLogout={handleLogout}
         onShowLockSettings={() => setShowLockSettings(true)}
+        onMasterPasswordChange={handleMasterPasswordChange}
       />
       {showLockSettings && (
         <AutoLockSettings

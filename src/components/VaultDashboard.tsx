@@ -26,6 +26,7 @@ import {
   Merge, Replace, Info, Star, ShieldAlert, ShieldCheck, X
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { VaultItem, IndexedDBStorage, PasswordData } from '../services/indexedDBStorage';
 import { toast } from 'sonner';
 import { VaultItemForm } from './VaultItemForm';
@@ -45,6 +46,7 @@ interface VaultDashboardProps {
   masterPassword: string;
   onLogout: () => void;
   onShowLockSettings?: () => void;
+  onMasterPasswordChange?: (newPassword: string, hint?: string) => Promise<void> | void;
   initialItems?: VaultItem[];
   onSaveItem?: (item: VaultItem) => Promise<void>;
   onDeleteItem?: (itemId: string) => Promise<void>;
@@ -52,7 +54,7 @@ interface VaultDashboardProps {
 
 export const VaultDashboard = ({ 
   masterPassword, onLogout, onShowLockSettings, initialItems,
-  onSaveItem: onSaveItemProp, onDeleteItem: onDeleteItemProp
+  onMasterPasswordChange, onSaveItem: onSaveItemProp, onDeleteItem: onDeleteItemProp
 }: VaultDashboardProps) => {
   const [items, setItems] = useState<VaultItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,6 +66,11 @@ export const VaultDashboard = ({
   const [isLoading, setIsLoading] = useState(true);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showChangePasswordDialog, setShowChangePasswordDialog] = useState(false);
+  const [newMasterPassword, setNewMasterPassword] = useState('');
+  const [confirmNewMasterPassword, setConfirmNewMasterPassword] = useState('');
+  const [newPasswordHint, setNewPasswordHint] = useState('');
+  const [isChangingMasterPassword, setIsChangingMasterPassword] = useState(false);
   const [importFileContent, setImportFileContent] = useState<string | null>(null);
   const [importFileName, setImportFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -291,7 +298,9 @@ export const VaultDashboard = ({
             toast.success('Backup shared to cloud storage');
             return;
           }
-        } catch {}
+        } catch (shareError) {
+          console.debug('Native file share unavailable, falling back to download', shareError);
+        }
       }
       
       const url = URL.createObjectURL(blob);
@@ -341,6 +350,41 @@ export const VaultDashboard = ({
     setShowImportDialog(false);
     setImportFileContent(null);
     setImportFileName('');
+  };
+
+  const handleChangeMasterPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const nextPassword = newMasterPassword.trim();
+    if (nextPassword.length < 8) {
+      toast.error('Use at least 8 characters for your new master password.');
+      return;
+    }
+
+    if (nextPassword !== confirmNewMasterPassword) {
+      toast.error('New master passwords do not match.');
+      return;
+    }
+
+    try {
+      setIsChangingMasterPassword(true);
+      await IndexedDBStorage.saveVault(items, nextPassword, newPasswordHint.trim() || undefined);
+      const biometricKey = await IndexedDBStorage.getBiometricKey();
+      if (biometricKey) {
+        await IndexedDBStorage.storeBiometricKey(biometricKey.credentialId, btoa(nextPassword));
+      }
+      await onMasterPasswordChange?.(nextPassword, newPasswordHint.trim() || undefined);
+      setShowChangePasswordDialog(false);
+      setNewMasterPassword('');
+      setConfirmNewMasterPassword('');
+      setNewPasswordHint('');
+      toast.success('Master password changed. New backups must use this password.');
+    } catch (error) {
+      console.error('Change master password error:', error);
+      toast.error(`Failed to change master password: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsChangingMasterPassword(false);
+    }
   };
 
   const filteredItems = items
@@ -436,6 +480,9 @@ export const VaultDashboard = ({
                       <Lock className="w-4 h-4 mr-2" />Auto-Lock Settings
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuItem onClick={() => setShowChangePasswordDialog(true)}>
+                    <Key className="w-4 h-4 mr-2" />Change Master Password
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setShowEmergency(true)}>
                     <ShieldAlert className="w-4 h-4 mr-2" />Emergency Kit
                   </DropdownMenuItem>
@@ -466,6 +513,7 @@ export const VaultDashboard = ({
                   {onShowLockSettings && (
                     <DropdownMenuItem onClick={onShowLockSettings}><Lock className="w-4 h-4 mr-2" />Auto-Lock Settings</DropdownMenuItem>
                   )}
+                  <DropdownMenuItem onClick={() => setShowChangePasswordDialog(true)}><Key className="w-4 h-4 mr-2" />Change Master Password</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setShowEmergency(true)}>
                     <ShieldAlert className="w-4 h-4 mr-2" />Emergency Kit
                   </DropdownMenuItem>
@@ -722,6 +770,65 @@ export const VaultDashboard = ({
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowImportDialog(false); setImportFileContent(null); }}>Cancel</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Master Password Dialog */}
+      <Dialog open={showChangePasswordDialog} onOpenChange={setShowChangePasswordDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5 text-primary" />
+              Change Master Password
+            </DialogTitle>
+            <DialogDescription>
+              Re-encrypt this unlocked vault with a new password you can remember.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleChangeMasterPassword} className="space-y-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+              If you unlocked with Face ID, this lets you recover access by setting a new master password. Existing encrypted backups still need the old password unless you export a new backup after changing it.
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-master-password">New master password</Label>
+              <Input
+                id="new-master-password"
+                type="password"
+                value={newMasterPassword}
+                onChange={(event) => setNewMasterPassword(event.target.value)}
+                autoComplete="new-password"
+                className="bg-input border-border/50"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-new-master-password">Confirm new master password</Label>
+              <Input
+                id="confirm-new-master-password"
+                type="password"
+                value={confirmNewMasterPassword}
+                onChange={(event) => setConfirmNewMasterPassword(event.target.value)}
+                autoComplete="new-password"
+                className="bg-input border-border/50"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password-hint">New hint (optional)</Label>
+              <Input
+                id="new-password-hint"
+                value={newPasswordHint}
+                onChange={(event) => setNewPasswordHint(event.target.value)}
+                className="bg-input border-border/50"
+              />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowChangePasswordDialog(false)}>Cancel</Button>
+              <Button type="submit" disabled={isChangingMasterPassword} className="bg-gradient-primary">
+                {isChangingMasterPassword ? 'Changing...' : 'Change Password'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
