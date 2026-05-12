@@ -26,6 +26,7 @@ import {
   Merge, Replace, Info, Star, ShieldAlert, ShieldCheck, X
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { VaultItem, IndexedDBStorage, PasswordData } from '../services/indexedDBStorage';
 import { toast } from 'sonner';
 import { VaultItemForm } from './VaultItemForm';
@@ -45,6 +46,7 @@ interface VaultDashboardProps {
   masterPassword: string;
   onLogout: () => void;
   onShowLockSettings?: () => void;
+  onMasterPasswordChange?: (newPassword: string, hint?: string) => Promise<void> | void;
   initialItems?: VaultItem[];
   onSaveItem?: (item: VaultItem) => Promise<void>;
   onDeleteItem?: (itemId: string) => Promise<void>;
@@ -52,7 +54,7 @@ interface VaultDashboardProps {
 
 export const VaultDashboard = ({ 
   masterPassword, onLogout, onShowLockSettings, initialItems,
-  onSaveItem: onSaveItemProp, onDeleteItem: onDeleteItemProp
+  onMasterPasswordChange, onSaveItem: onSaveItemProp, onDeleteItem: onDeleteItemProp
 }: VaultDashboardProps) => {
   const [items, setItems] = useState<VaultItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,6 +66,11 @@ export const VaultDashboard = ({
   const [isLoading, setIsLoading] = useState(true);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showChangePasswordDialog, setShowChangePasswordDialog] = useState(false);
+  const [newMasterPassword, setNewMasterPassword] = useState('');
+  const [confirmNewMasterPassword, setConfirmNewMasterPassword] = useState('');
+  const [newPasswordHint, setNewPasswordHint] = useState('');
+  const [isChangingMasterPassword, setIsChangingMasterPassword] = useState(false);
   const [importFileContent, setImportFileContent] = useState<string | null>(null);
   const [importFileName, setImportFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
