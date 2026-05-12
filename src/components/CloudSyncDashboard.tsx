@@ -24,12 +24,14 @@ interface CloudSyncDashboardProps {
   masterPassword: string;
   onLogout: () => void;
   onShowLockSettings: () => void;
+  onMasterPasswordChange?: (newPassword: string, hint?: string) => Promise<void> | void;
 }
 
 export const CloudSyncDashboard = ({ 
   masterPassword, 
   onLogout, 
-  onShowLockSettings 
+  onShowLockSettings,
+  onMasterPasswordChange 
 }: CloudSyncDashboardProps) => {
   const [vaultItems, setVaultItems] = useState<VaultItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -407,6 +409,7 @@ export const CloudSyncDashboard = ({
         masterPassword={masterPassword}
         onLogout={onLogout}
         onShowLockSettings={onShowLockSettings}
+        onMasterPasswordChange={onMasterPasswordChange}
         // Override the vault management methods to use cloud sync
         initialItems={vaultItems}
         onSaveItem={handleSaveItem}
